@@ -344,23 +344,15 @@ def create_mask(mask_np):
     return input_mask
 
 def load_image(data_path):
-    # img_path = tf.strings.regex_replace(data_path, '_gtFine_color', '_leftImg8bit')
     img_path = tf.strings.regex_replace(data_path, '_gtFine_labelIds', '_leftImg8bit')
-    
     mask_path = data_path
     
     image = tf.io.read_file(img_path)
     input_image = tf.image.decode_png(image, channels=3)
-#     input_image = tf.image.resize(input_image, (416, 416))
     input_image = tf.cast(input_image, tf.float32) / 255.0
     
     mask = tf.io.read_file(mask_path)
     input_mask = tf.image.decode_png(mask)
-    # input_mask = tf.cast(mask, tf.int32)
-    # print(input_mask.shape)
-    # input_mask = tf.image.resize(input_mask, (416, 416))
-    # input_mask = tf.compat.v1.py_func(create_mask, [input_mask], Tout=tf.int32)
-    # input_mask.set_shape(tf.TensorShape([None, None, None]))
     
     return input_image, input_mask
 
