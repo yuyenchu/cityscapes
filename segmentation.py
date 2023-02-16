@@ -71,7 +71,7 @@ class LogPlotCallback(tf.keras.callbacks.Callback):
 # start clearml task and get config
 task = Task.init(project_name='semantic_segmentation', task_name='cityscapes segmentation', output_uri='http://192.168.0.152:8081')
 logger = task.get_logger()
-configs = {'epochs': 100, 'batch_size': 20, 'base_lr': 0.001, 'first_decay_epoch': 5,'model_type': 'enhanced_efm', 'continue': True}
+configs = {'epochs': 10, 'batch_size': 20, 'base_lr': 0.001, 'first_decay_epoch': 5, 'm_mul': 0.9, 'alpha': 3, 'model_type': 'enhanced_efm', 'continue': False}
 configs = task.connect(configs) 
 print('configs =', configs) 
 
@@ -134,8 +134,8 @@ lp_callback = LogPlotCallback(sample_image, sample_mask, logger)
 lr_decayed_fn = tf.keras.optimizers.schedules.CosineDecayRestarts(
     configs['base_lr'],
     configs['first_decay_epoch']*STEPS_PER_EPOCH,
-    m_mul=0.9,
-    alpha=1e-3)
+    m_mul=configs['m_mul'],
+    alpha=10**-configs['alpha'])
 # IoU metric for sparse category, IoU = TP/(TP+FP+FN)
 class SparseMeanIoU(tf.keras.metrics.MeanIoU):
     def __init__(self,
