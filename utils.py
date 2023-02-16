@@ -110,6 +110,27 @@ class Conv_Block(tf.keras.layers.Layer):
         return x
         # return self.conv(inputs)
 
+# class SelfAttention_Block(tf.keras.layers.Layer):
+#     # Self attention layer for n_channels
+#     def __init__(self, n_channels):
+#         self.n_channels = n_channels
+        
+#     def build(self, input_shape): 
+#         n = self.n_channels
+#         self.query = layers.Conv2D(n//8, 1, padding='same', use_bias=False)
+#         self.key = layers.Conv2D(n//8, 1, padding='same', use_bias=False)
+#         self.value = layers.Conv2D(n, 1, padding='same', use_bias=False)
+#         self.gamma = tf.Variable(0, trainable=True, dtype=tf.float32)
+#         self.softmax = layers.Softmax(axis=1)
+
+#     def call(self, x):
+#         size = tf.shape(x)
+#         x = tf.reshape(x,[*size[:2],-1])
+#         f, g, h = self.query(x), self.key(x), self.value(x)
+#         beta = self.softmax(tf.matmul(f.transpose(1,2), g))
+#         o = self.gamma * tf.matmul(h, beta) + x
+#         return tf.reshape(o, size)        
+
 def hswish(x):
     return x * tf.nn.relu6(x + 3) / 6
 

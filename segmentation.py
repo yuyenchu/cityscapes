@@ -25,7 +25,7 @@ def load_model(model, model_type=None):
         return 
     prev_task_id = prev_tasks[0].task_id
     prev_task = Task.get_task(prev_task_id)
-    snapshots = [m for m in prev_task.models['output'] if (model_type in m or model_type is None)]
+    snapshots = [m for m in prev_task.models['output'] if (model_type in m.url or model_type is None)]
     if (len(snapshots) == 0):
         print('no valid model snapshots')
         return 
@@ -38,8 +38,8 @@ def load_model(model, model_type=None):
     try:
         model.load_weights(local_weights_path)
     except:
-        model.load_weights('enhanced_efm20230215-160814')
-        print('fail loading weights')
+        # model.load_weights('enhanced_efm20230215-160814')
+        print('failed loading weights')
 
 def log_pred(image, mask, model, logger, series):
     pred = model.predict(sample_image[tf.newaxis, ...])
@@ -71,7 +71,7 @@ class LogPlotCallback(tf.keras.callbacks.Callback):
 # start clearml task and get config
 task = Task.init(project_name='semantic_segmentation', task_name='cityscapes segmentation', output_uri='http://192.168.0.152:8081')
 logger = task.get_logger()
-configs = {'epochs': 200, 'batch_size': 20, 'base_lr': 0.001, 'first_decay_epoch': 5,'model_type': 'enhanced_efm', 'continue': True}
+configs = {'epochs': 100, 'batch_size': 20, 'base_lr': 0.001, 'first_decay_epoch': 5,'model_type': 'enhanced_efm', 'continue': True}
 configs = task.connect(configs) 
 print('configs =', configs) 
 
