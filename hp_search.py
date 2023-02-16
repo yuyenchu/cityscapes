@@ -28,13 +28,13 @@ optimizer = HyperParameterOptimizer(
         UniformIntegerParameterRange('epochs', min_value=10, max_value=100, step_size=2),
         UniformIntegerParameterRange('batch_size', min_value=8, max_value=20, step_size=4),
         UniformParameterRange('base_lr', min_value=0.00025, max_value=0.01, step_size=0.00025),
-        UniformParameterRange('first_decay_epoch', min_value=2, max_value=15, step_size=1),
+        UniformIntegerParameterRange('first_decay_epoch', min_value=2, max_value=15, step_size=1),
         UniformParameterRange('base_lr', min_value=0.1, max_value=0.9, step_size=0.05),
         UniformParameterRange('alpha', min_value=1, max_value=3, step_size=0.5),
     ],
     # objective metric
-    objective_metric_title='epoch_sparse_categorical_accuracy',
-    objective_metric_series='validation: epoch_sparse_categorical_accuracy',
+    objective_metric_title='epoch_sparse_mean_iou',
+    objective_metric_series='validation: epoch_sparse_mean_iou',
     objective_metric_sign='max',
 
     # optimizer algorithm
@@ -60,6 +60,6 @@ print('Top {} experiments are:'.format(k))
 for n, t in enumerate(top_exp, 1):
     print('Rank {}: task id={} |result={}'
           .format(n, t.id, t.get_last_scalar_metrics()['accuracy']['total']['last']))
-
 optimizer.stop()
+print('Optimization done')
 task.close()
