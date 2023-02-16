@@ -25,12 +25,12 @@ optimizer = HyperParameterOptimizer(
     base_task_id=TEMPLATE_TASK_ID,  # experiment to optimize
     # hyper-parameters to optimize
     hyper_parameters=[
-        UniformIntegerParameterRange('epochs', min_value=10, max_value=100, step_size=2),
-        UniformIntegerParameterRange('batch_size', min_value=8, max_value=20, step_size=4),
-        UniformParameterRange('base_lr', min_value=0.00025, max_value=0.01, step_size=0.00025),
-        UniformIntegerParameterRange('first_decay_epoch', min_value=2, max_value=15, step_size=1),
-        UniformParameterRange('base_lr', min_value=0.1, max_value=0.9, step_size=0.05),
-        UniformParameterRange('alpha', min_value=1, max_value=3, step_size=0.5),
+        UniformIntegerParameterRange('General/epochs', min_value=10, max_value=100, step_size=2),
+        UniformIntegerParameterRange('General/batch_size', min_value=8, max_value=20, step_size=4),
+        UniformParameterRange('General/base_lr', min_value=0.00025, max_value=0.01, step_size=0.00025),
+        UniformIntegerParameterRange('General/first_decay_epoch', min_value=2, max_value=15, step_size=1),
+        UniformParameterRange('General/base_lr', min_value=0.1, max_value=0.9, step_size=0.05),
+        UniformParameterRange('General/alpha', min_value=1, max_value=3, step_size=0.5),
     ],
     # objective metric
     objective_metric_title='epoch_sparse_mean_iou',
