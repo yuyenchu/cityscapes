@@ -60,7 +60,7 @@ top_exp = optimizer.get_top_experiments(top_k=k)
 print('Top {} experiments are:'.format(k))
 for n, t in enumerate(top_exp, 1):
     print('Rank {}: task id={} |result={}'
-          .format(n, t.id, t.get_last_scalar_metrics()['accuracy']['total']['last']))
+          .format(n, t.id, t.get_last_scalar_metrics()['epoch_sparse_mean_iou']['validation: epoch_sparse_mean_iou']['last']))
 optimizer.stop()
 print('Optimization done')
 task.close()
