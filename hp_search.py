@@ -29,7 +29,7 @@ optimizer = HyperParameterOptimizer(
         UniformIntegerParameterRange('General/batch_size', min_value=8, max_value=20, step_size=4),
         UniformParameterRange('General/base_lr', min_value=0.00025, max_value=0.01, step_size=0.00025),
         UniformIntegerParameterRange('General/first_decay_epoch', min_value=2, max_value=15, step_size=1),
-        UniformParameterRange('General/base_lr', min_value=0.1, max_value=0.9, step_size=0.05),
+        UniformParameterRange('General/m_mul', min_value=0.1, max_value=0.9, step_size=0.05),
         UniformParameterRange('General/alpha', min_value=1, max_value=3, step_size=0.5),
     ],
     # objective metric
@@ -55,7 +55,8 @@ task.execute_remotely(queue_name="services", exit_process=True)
 optimizer.set_report_period(1) 
 optimizer.start(job_complete_callback=job_complete_callback)  
 optimizer.wait()
-top_exp = optimizer.get_top_experiments(top_k=3)
+k=3
+top_exp = optimizer.get_top_experiments(top_k=k)
 print('Top {} experiments are:'.format(k))
 for n, t in enumerate(top_exp, 1):
     print('Rank {}: task id={} |result={}'
