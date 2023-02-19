@@ -110,26 +110,37 @@ class Conv_Block(tf.keras.layers.Layer):
         return x
         # return self.conv(inputs)
 
-# class SelfAttention_Block(tf.keras.layers.Layer):
-#     # Self attention layer for n_channels
-#     def __init__(self, n_channels):
-#         self.n_channels = n_channels
+class SelfAttention_Block(tf.keras.layers.Layer):
+    def __init__(self, reduction_factor, name=None):
+        super(SelfAttention_Block, self).__init__(name=name)
+        self.reduction_factor = reduction_factor
         
-#     def build(self, input_shape): 
-#         n = self.n_channels
-#         self.query = layers.Conv2D(n//8, 1, padding='same', use_bias=False)
-#         self.key = layers.Conv2D(n//8, 1, padding='same', use_bias=False)
-#         self.value = layers.Conv2D(n, 1, padding='same', use_bias=False)
-#         self.gamma = tf.Variable(0, trainable=True, dtype=tf.float32)
-#         self.softmax = layers.Softmax(axis=1)
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'reduction_factor': self.reduction_factor
+        })
+        return config
+        
+    # input shape requires channel last
+    def build(self, input_shape): 
+        n = input_shape[-1]
+        r = self.reduction_factor
+        self.query = layers.Conv2D(n//r, 1, padding='same', use_bias=False)
+        self.key = layers.Conv2D(n//r, 1, padding='same', use_bias=False)
+        self.value = layers.Conv2D(n, 1, padding='same', use_bias=False)
+        self.reshape1 = tf.keras.layers.Reshape((-1, n//r))
+        self.reshape2 = tf.keras.layers.Reshape((-1, n))
+        self.gamma = tf.Variable(0, trainable=True, dtype=tf.float32)
+        self.softmax = layers.Softmax(axis=1)
 
-#     def call(self, x):
-#         size = tf.shape(x)
-#         x = tf.reshape(x,[*size[:2],-1])
-#         f, g, h = self.query(x), self.key(x), self.value(x)
-#         beta = self.softmax(tf.matmul(f.transpose(1,2), g))
-#         o = self.gamma * tf.matmul(h, beta) + x
-#         return tf.reshape(o, size)        
+    def call(self, x):
+        size = tf.shape(x)
+        f, g, h = self.query(x), self.key(x), self.value(x)
+        f, g, h = self.reshape1(f), self.reshape1(g), self.reshape2(h)
+        beta = self.softmax(tf.matmul(f, tf.transpose(g, perm=[0,2,1])))
+        beta = tf.reshape(tf.matmul(h, beta, transpose_a=True), size) 
+        return self.gamma * beta + x       
 
 def hswish(x):
     return x * tf.nn.relu6(x + 3) / 6
@@ -162,6 +173,38 @@ class MNV3_Block(tf.keras.layers.Layer):
     def call(self, inputs):
         x = self.conv(inputs)
         x = self.se(x)
+        x = self.out(x)
+        return x
+
+# mobilenet self attantion, replace se block with self attantion block
+class MNSA_Block(tf.keras.layers.Layer):
+    def __init__(self, kernel, filters, stride=1, activation=tf.nn.relu6, reduction_factor=4, name=None):
+        super(MNSA_Block, self).__init__(name=name)
+        self.kernel = kernel
+        self.filters = filters
+        self.stride = stride
+        self.activation = activation
+        self.reduction_factor = reduction_factor
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'kernel': self.kernel,
+            'filters': self.filters,
+            'stride': self.stride,
+            'activation': self.activation,
+            'reduction_factor': self.reduction_factor
+        })
+        return config
+
+    def build(self, input_shape):
+        self.conv = Conv_Block(self.kernel, self.filters, self.stride, self.activation)
+        self.sa = SelfAttention_Block(self.reduction_factor)
+        self.out = layers.Conv2D(self.filters, 1, padding='same', activation=self.activation)
+
+    def call(self, inputs):
+        x = self.conv(inputs)
+        x = self.sa(x)
         x = self.out(x)
         return x
     
@@ -305,6 +348,70 @@ def get_enhanced_efm(CLASS_NUIM = 3):
     out = tf.keras.layers.Softmax(name='softmax_out')(out)
 
     return tf.keras.Model(inputs=[input], outputs=[out])
+
+
+def get_enhanced_efm_attention(CLASS_NUM = 3):
+    # down sample with CSP
+    input = tf.keras.Input((416,416,3),name='input')
+    x1 = MNV3_Block(3,16,2,hswish,name='block1')(input)
+    x2 = MNV3_Block(5,40,2,name='block2')(x1)
+    x2, x2p = tf.split(x2,num_or_size_splits=2, axis=-1)
+    x3 = MNV3_Block(3,80,2,hswish,name='block3')(x2)
+    x3, x3p = tf.split(x3,num_or_size_splits=2, axis=-1)
+    x4 = MNV3_Block(3,160,2,hswish,name='block4')(x3)
+    x4, x4p = tf.split(x4,num_or_size_splits=2, axis=-1)
+    x5 = MNV3_Block(3,320,2,hswish,name='block5')(x4)
+    # up sample
+    p5 = layers.Conv2DTranspose(160,3,2,padding='same',name='up5')(x5)
+    x4 = layers.Concatenate()([x4,x4p])
+    x4 = layers.Conv2D(160, 1, padding='same', activation='relu6')(x4)
+    x4 = SelfAttention_Block(4)(x4)
+    p5 = layers.Add(name='fuse1')([p5, x4])
+
+    p4 = layers.Conv2DTranspose(80,3,2,padding='same',name='up4')(p5)
+    x3 = layers.Concatenate()([x3,x3p])
+    x3 = layers.Conv2D(80, 1, padding='same', activation='relu6')(x3)
+    x3 = SelfAttention_Block(4)(x3)
+    p4 = layers.Add(name='fuse2')([p4, x3])
+
+    p3 = layers.Conv2DTranspose(40,3,2,padding='same',name='up3')(p4)
+    x2 = layers.Concatenate()([x2,x2p])
+    # x2 = SelfAttention_Block(4)(x2)
+    p3 = layers.Add(name='fuse3')([p3, layers.Conv2D(40, 1, padding='same', activation='relu6')(x2)])
+
+    p2 = layers.Conv2DTranspose(16,3,2,padding='same',name='up2')(p3)
+    # p2 = layers.Add(name='fuse4')([p2, layers.Conv2D(16, 1, padding='same', activation='relu6')(x1)])
+    # bottom-up augmentation
+    n2 = layers.SeparableConv2D(40,3,2,padding='same',name='bottomup1')(p2)
+    n2 = layers.Add(name='fuse5')([n2, p3])
+
+    n3 = layers.SeparableConv2D(80,3,2,padding='same',name='bottomup2')(n2)
+    n3 = layers.Add(name='fuse6')([n3, p4])
+    # n3 = SelfAttention_Block(4, name='attention1')(n3)
+
+    n4 = layers.SeparableConv2D(160,3,2,padding='same',name='bottomup3')(n3)
+    n4 = layers.Add(name='fuse7')([n4, p5])
+    # n4 = SelfAttention_Block(4, name='attention2')(n4)
+
+    n5 = layers.SeparableConv2D(320,3,2,padding='same',name='bottomup4')(n4)
+    out_5 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n5)
+    out_5 = layers.Resizing(416,416, name="aux_out4")(out_5)
+    n5 = layers.UpSampling2D(8)(n5)
+    out_4 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n4)
+    out_4 = layers.Resizing(416,416, name="aux_out3")(out_4)
+    n4 = layers.UpSampling2D(4)(n4)
+    out_3 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n3)
+    out_3 = layers.Resizing(416,416, name="aux_out2")(out_3)
+    n3 = layers.UpSampling2D(2)(n3)
+    out_2 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n2)
+    out_2 = layers.Resizing(416,416, name="aux_out1")(out_2)
+
+    out = layers.Concatenate()([n2,n3,n4,n5])
+    out = layers.Conv2DTranspose(16,3,2,padding='same',name='out1')(out)
+    out = layers.Conv2DTranspose(CLASS_NUM,3,2,padding='same',name='out2')(out)
+    out = tf.keras.layers.Softmax(name='softmax_out')(out)
+
+    return tf.keras.Model(inputs=[input], outputs=[out, out_2, out_3, out_4, out_5])
 
 def get_enhanced_efm_small(CLASS_NUIM = 3):
     # down sample

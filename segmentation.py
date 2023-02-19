@@ -42,7 +42,8 @@ def load_model(model, model_type=None):
         print('failed loading weights')
 
 def log_pred(image, mask, model, logger, series):
-    pred = model.predict(sample_image[tf.newaxis, ...])
+    pred = model.predict(sample_image[tf.newaxis, ...])[0]
+    # print(tf.shape(pred))
     pred_mask = tf.argmax(pred, axis=-1)
     pred_mask = pred_mask[..., tf.newaxis][0]
     
@@ -71,7 +72,7 @@ class LogPlotCallback(tf.keras.callbacks.Callback):
 # start clearml task and get config
 task = Task.init(project_name='semantic_segmentation', task_name='cityscapes segmentation', output_uri='http://192.168.0.152:8081')
 logger = task.get_logger()
-configs = {'epochs': 10, 'batch_size': 20, 'base_lr': 0.001, 'first_decay_epoch': 5, 'm_mul': 0.9, 'alpha': 3, 'model_type': 'enhanced_efm', 'continue': False}
+configs = {'epochs': 100, 'batch_size': 20, 'base_lr': 0.00525, 'first_decay_epoch': 8, 'm_mul': 0.7, 'alpha': 3, 'lambda': 0.02, 'model_type': 'enhanced_efm_attention', 'continue': False}
 configs = task.connect(configs) 
 print('configs =', configs) 
 
@@ -85,6 +86,7 @@ test_images = tf.data.Dataset.list_files(f'{dataset_path}/val/*/*_gtFine_labelId
 # constants
 EPOCHS = configs['epochs']
 BATCH_SIZE = configs['batch_size']
+LAMBDA = configs['lambda']
 VAL_SUBSPLITS = 5
 BUFFER_SIZE = BATCH_SIZE*2
 TRAIN_LENGTH = train_images.cardinality().numpy()
@@ -108,6 +110,7 @@ models = {
     'fpn': get_fpn,
     'enhanced_fpn': get_enhanced_fpn,
     'enhanced_efm': get_enhanced_efm,
+    'enhanced_efm_attention': get_enhanced_efm_attention,
     'enhanced_efm_small': get_enhanced_efm_small
 }
 model = models[configs['model_type']](8)
@@ -117,6 +120,22 @@ if (configs['continue']):
     load_model(model, configs['model_type'])
 analyze(model)
 log_pred(sample_image, sample_mask, model, logger, 'start')
+
+# loss functions
+losses = {
+    "softmax_out": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_loss"),
+    "aux_out1": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, name="aux_loss_1"),
+    "aux_out2": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, name="aux_loss_2"),
+    "aux_out3": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, name="aux_loss_3"),
+    "aux_out4": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, name="aux_loss_4"),
+}
+lossWeights = {
+    "softmax_out": 1.0, 
+    "aux_out1": LAMBDA, 
+    "aux_out1": LAMBDA**2, 
+    "aux_out1": LAMBDA**3, 
+    "aux_out1": LAMBDA**4
+}
 
 # callbacks
 logs = f'{configs["model_type"]}{datetime.now().strftime("%Y%m%d-%H%M%S")}'
@@ -152,7 +171,7 @@ class SparseMeanIoU(tf.keras.metrics.MeanIoU):
     
 # model training
 model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr_decayed_fn),
-            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
+            loss=losses, loss_weights=lossWeights,
             metrics=['sparse_categorical_accuracy','mean_squared_error',SparseMeanIoU(num_classes=8)])
 
 model_history = model.fit(train_batches, epochs=EPOCHS,
