@@ -72,7 +72,7 @@ class LogPlotCallback(tf.keras.callbacks.Callback):
 # start clearml task and get config
 task = Task.init(project_name='semantic_segmentation', task_name='cityscapes segmentation', output_uri='http://192.168.0.152:8081')
 logger = task.get_logger()
-configs = {'epochs': 100, 'batch_size': 20, 'base_lr': 0.00525, 'first_decay_epoch': 8, 'm_mul': 0.7, 'alpha': 3, 'lambda': 0.02, 'model_type': 'enhanced_efm_attention', 'continue': False}
+configs = {'epochs': 10, 'batch_size': 20, 'base_lr': 0.005, 'first_decay_epoch': 5, 'm_mul': 0.7, 'alpha': 3, 'lambda': 0.02, 'model_type': 'enhanced_efm_attention', 'continue': False}
 configs = task.connect(configs) 
 print('configs =', configs) 
 
