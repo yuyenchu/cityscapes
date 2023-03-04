@@ -365,19 +365,23 @@ def get_enhanced_efm_attention(CLASS_NUM = 3):
     p5 = layers.Conv2DTranspose(160,3,2,padding='same',name='up5')(x5)
     x4 = layers.Concatenate()([x4,x4p])
     x4 = layers.Conv2D(160, 1, padding='same', activation='relu6')(x4)
-    x4 = SelfAttention_Block(4)(x4)
-    p5 = layers.Add(name='fuse1')([p5, x4])
+    x4a = layers.Attention(use_scale=True)([x4,x4,x4])
+    # x4 = SelfAttention_Block(4)(x4)
+    p5 = layers.Add(name='fuse1')([p5, x4, x4a])
 
     p4 = layers.Conv2DTranspose(80,3,2,padding='same',name='up4')(p5)
     x3 = layers.Concatenate()([x3,x3p])
     x3 = layers.Conv2D(80, 1, padding='same', activation='relu6')(x3)
-    x3 = SelfAttention_Block(4)(x3)
-    p4 = layers.Add(name='fuse2')([p4, x3])
+    x3a = layers.Attention(use_scale=True)([x3,x3,x3])
+    # x3 = SelfAttention_Block(4)(x3)
+    p4 = layers.Add(name='fuse2')([p4, x3, x3a])
 
     p3 = layers.Conv2DTranspose(40,3,2,padding='same',name='up3')(p4)
     x2 = layers.Concatenate()([x2,x2p])
+    x2 = layers.Conv2D(40, 1, padding='same', activation='relu6')(x2)
+    x2a = layers.Attention(use_scale=True)([x2,x2,x2])
     # x2 = SelfAttention_Block(4)(x2)
-    p3 = layers.Add(name='fuse3')([p3, layers.Conv2D(40, 1, padding='same', activation='relu6')(x2)])
+    p3 = layers.Add(name='fuse3')([p3, x2, x2a])
 
     p2 = layers.Conv2DTranspose(16,3,2,padding='same',name='up2')(p3)
     # p2 = layers.Add(name='fuse4')([p2, layers.Conv2D(16, 1, padding='same', activation='relu6')(x1)])
@@ -495,3 +499,17 @@ class Augment(tf.keras.layers.Layer):
         inputs = self.augment_inputs(inputs)
         labels = self.augment_labels(labels)
         return inputs, labels
+    
+# IoU metric for sparse category, IoU = TP/(TP+FP+FN)
+class SparseMeanIoU(tf.keras.metrics.MeanIoU):
+    def __init__(self,
+               y_true=None,
+               y_pred=None,
+               num_classes=None,
+               name='sparse_mean_iou',
+               dtype=None):
+        super(SparseMeanIoU, self).__init__(num_classes = num_classes,name=name, dtype=dtype)
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        y_pred = tf.math.argmax(y_pred, axis=-1)
+        return super().update_state(y_true, y_pred, sample_weight)

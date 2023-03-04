@@ -1,3 +1,4 @@
+import argparse
 import tensorflow as tf
 import tensorflow.keras.layers as layers
 import numpy as np
@@ -6,12 +7,28 @@ from datetime import datetime
 from clearml import Task, Dataset
 from utils import *
 
+DEBUG = False
+
 # device capabilities
 physical_devices = tf.config.list_physical_devices('GPU')
-print(tf.__version__, physical_devices)
-assert len(physical_devices) > 0, "Not enough GPU hardware devices available"
-config = tf.config.experimental.set_memory_growth(physical_devices[0], True)
+print("Tensorflow Version:",tf.__version__, ", GPU devices:",physical_devices)
+if (len(physical_devices) > 0):
+    config = tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
+def get_parser():
+    parser = argparse.ArgumentParser(description='options for training')
+    parser.add_argument('-e', '--epochs',     help='epochs to train',       type=int,   default=10)
+    parser.add_argument('-b', '--batch_size', help='batch size per step',   type=int,   default=20)
+    parser.add_argument('-f', '--first_decay_epoch', help='epochs for learning rate decay', type=int, default=5)
+    parser.add_argument('-i', '--initial_lr', help='initial learning rate', type=float, default=0.005)
+    parser.add_argument('-m', '--m_mul',      help='cosine decay param',    type=float, default=0.7)
+    parser.add_argument('-a', '--alpha',      help='cosine decay param',    type=float, default=3)
+    parser.add_argument('-l', '--lambda',     help='cosine decay param',    type=float, default=0.02, dest='lambda_val')
+    parser.add_argument(
+        '-c', '--continue', action='store_true', default=False, help='continue from last recorded task', dest='continue_train'
+    )
+    parser.add_argument('--model_type', help='model type', default='enhanced_efm_attention')
+    return parser
 
 def load_model(model, model_type=None):
     prev_tasks = Task.get_tasks(project_name='semantic_segmentation', \
@@ -57,7 +74,30 @@ def log_pred(image, mask, model, logger, series):
         plt.imshow(tf.keras.utils.array_to_img(display_list[i]))
         plt.axis('off')
     logger.report_matplotlib_figure('Model Prediction', series, fig)
-    
+
+def get_loss(model, l): 
+    assert l <= 1, 'auxiliary loss cannot be greater than main loss'
+    lossDict = {}
+    lossWeights = {}
+    for node in model.outputs:
+        n = node.name.split('/')[0]
+        if n == 'softmax_out':
+            lossDict[n] = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_loss")
+            lossWeights[n] = 1.0
+        elif 'aux_out' in n:
+            try:
+                i = int(n.replace('aux_out',''))
+                lossDict[n] = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, name=f"aux_loss_{i}")
+                lossWeights[n] = l**i
+            except:
+                continue
+    if 'softmax_out' not in lossDict.keys():
+        n = model.outputs[0].name
+        lossDict[n] = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_loss")
+        lossWeights[n] = 1.0
+
+    return lossDict, lossWeights
+
 class LogPlotCallback(tf.keras.callbacks.Callback):
     def __init__(self, image, mask, logger):
         super(LogPlotCallback, self).__init__()
@@ -69,12 +109,19 @@ class LogPlotCallback(tf.keras.callbacks.Callback):
         if (epoch%10==0):
             log_pred(self.image, self.mask, self.model, self.logger, f'epoch: {epoch}')
 
+# define model type options
+models = {
+    'fpn': get_fpn,
+    'enhanced_fpn': get_enhanced_fpn,
+    'enhanced_efm': get_enhanced_efm,
+    'enhanced_efm_attention': get_enhanced_efm_attention,
+    'enhanced_efm_small': get_enhanced_efm_small
+}
+
 # start clearml task and get config
-task = Task.init(project_name='semantic_segmentation', task_name='cityscapes segmentation', output_uri='http://192.168.0.152:8081')
-logger = task.get_logger()
-configs = {'epochs': 10, 'batch_size': 20, 'base_lr': 0.005, 'first_decay_epoch': 5, 'm_mul': 0.7, 'alpha': 3, 'lambda': 0.02, 'model_type': 'enhanced_efm_attention', 'continue': False}
-configs = task.connect(configs) 
-print('configs =', configs) 
+if (not DEBUG):
+    task = Task.init(project_name='semantic_segmentation', task_name='cityscapes segmentation', output_uri='http://192.168.0.152:8081')
+    logger = task.get_logger()
 
 # get dataset
 dataset = Dataset.get(dataset_project='semantic_segmentation', dataset_name='cityscapes_fine', dataset_version='1.0.0-c416')
@@ -83,103 +130,80 @@ dataset_path = dataset.get_local_copy()
 train_images = tf.data.Dataset.list_files(f'{dataset_path}/train/*/*_gtFine_labelIds.png').map(load_image, num_parallel_calls=tf.data.AUTOTUNE)
 test_images = tf.data.Dataset.list_files(f'{dataset_path}/val/*/*_gtFine_labelIds.png').map(load_image, num_parallel_calls=tf.data.AUTOTUNE)
 
-# constants
-EPOCHS = configs['epochs']
-BATCH_SIZE = configs['batch_size']
-LAMBDA = configs['lambda']
-VAL_SUBSPLITS = 5
-BUFFER_SIZE = BATCH_SIZE*2
-TRAIN_LENGTH = train_images.cardinality().numpy()
-TEST_LENGTH = test_images.cardinality().numpy()
-VALIDATION_STEPS = TEST_LENGTH//BATCH_SIZE//VAL_SUBSPLITS
-STEPS_PER_EPOCH = TRAIN_LENGTH // BATCH_SIZE
-
-# data processing
-train_batches = (
-    train_images
-    .shuffle(BUFFER_SIZE, seed=0)
-    .batch(BATCH_SIZE)
-    .repeat()
-    .map(Augment())
-    .prefetch(buffer_size=tf.data.AUTOTUNE))
-test_batches = test_images.batch(BATCH_SIZE)
-sample_image, sample_mask = next(iter(test_images.take(1)))
-
-# define model
-models = {
-    'fpn': get_fpn,
-    'enhanced_fpn': get_enhanced_fpn,
-    'enhanced_efm': get_enhanced_efm,
-    'enhanced_efm_attention': get_enhanced_efm_attention,
-    'enhanced_efm_small': get_enhanced_efm_small
-}
-model = models[configs['model_type']](8)
-
-# load model weights from previous tasks
-if (configs['continue']):
-    load_model(model, configs['model_type'])
-analyze(model)
-log_pred(sample_image, sample_mask, model, logger, 'start')
-
-# loss functions
-losses = {
-    "softmax_out": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_loss"),
-    "aux_out1": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, name="aux_loss_1"),
-    "aux_out2": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, name="aux_loss_2"),
-    "aux_out3": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, name="aux_loss_3"),
-    "aux_out4": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, name="aux_loss_4"),
-}
-lossWeights = {
-    "softmax_out": 1.0, 
-    "aux_out1": LAMBDA, 
-    "aux_out1": LAMBDA**2, 
-    "aux_out1": LAMBDA**3, 
-    "aux_out1": LAMBDA**4
-}
-
-# callbacks
-logs = f'{configs["model_type"]}{datetime.now().strftime("%Y%m%d-%H%M%S")}'
-checkpoint_path = f'{configs["model_type"]}{datetime.now().strftime("%Y%m%d-%H%M%S")}_ckpt'
-
-tboard_callback = tf.keras.callbacks.TensorBoard(log_dir = logs,
-                                                histogram_freq = 1,
-                                                profile_batch = '200,220')
-cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
-                                                 save_weights_only=True,
-                                                 save_best_only=True,
-                                                 verbose=1)
-lp_callback = LogPlotCallback(sample_image, sample_mask, logger)
-# learning rate schedule
-lr_decayed_fn = tf.keras.optimizers.schedules.CosineDecayRestarts(
-    configs['base_lr'],
-    configs['first_decay_epoch']*STEPS_PER_EPOCH,
-    m_mul=configs['m_mul'],
-    alpha=10**-configs['alpha'])
-# IoU metric for sparse category, IoU = TP/(TP+FP+FN)
-class SparseMeanIoU(tf.keras.metrics.MeanIoU):
-    def __init__(self,
-               y_true=None,
-               y_pred=None,
-               num_classes=None,
-               name='sparse_mean_iou',
-               dtype=None):
-        super(SparseMeanIoU, self).__init__(num_classes = num_classes,name=name, dtype=dtype)
-
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        y_pred = tf.math.argmax(y_pred, axis=-1)
-        return super().update_state(y_true, y_pred, sample_weight)
+if __name__ == '__main__':
+    parser = get_parser()
+    args = parser.parse_args()  
+    print('configs =',args)
     
-# model training
-model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr_decayed_fn),
-            loss=losses, loss_weights=lossWeights,
-            metrics=['sparse_categorical_accuracy','mean_squared_error',SparseMeanIoU(num_classes=8)])
+    # constants
+    MODEL_TYPE = args.model_type
+    EPOCHS = args.epochs
+    BATCH_SIZE = args.batch_size
+    LAMBDA = args.lambda_val
+    VAL_SUBSPLITS = 5
+    BUFFER_SIZE = BATCH_SIZE*2
+    TRAIN_LENGTH = train_images.cardinality().numpy()
+    TEST_LENGTH = test_images.cardinality().numpy()
+    VALIDATION_STEPS = TEST_LENGTH//BATCH_SIZE//VAL_SUBSPLITS
+    STEPS_PER_EPOCH = TRAIN_LENGTH // BATCH_SIZE
 
-model_history = model.fit(train_batches, epochs=EPOCHS,
-                        steps_per_epoch=STEPS_PER_EPOCH,
-                        validation_steps=VALIDATION_STEPS,
-                        validation_data=test_batches,
-                        callbacks=[tboard_callback, cp_callback, lp_callback])
+    # data processing
+    train_batches = (
+        train_images
+        .shuffle(BUFFER_SIZE, seed=0)
+        .batch(BATCH_SIZE)
+        .repeat()
+        .map(Augment())
+        .prefetch(buffer_size=tf.data.AUTOTUNE))
+    test_batches = test_images.batch(BATCH_SIZE)
+    sample_image, sample_mask = next(iter(test_images.take(1)))
 
-log_pred(sample_image, sample_mask, model, logger, 'end')
-model.save(configs["model_type"])
-task.close()
+    # define model
+    model = models[MODEL_TYPE](8)
+
+    # load model weights from previous tasks
+    if (args.continue_train and not DEBUG):
+        load_model(model, MODEL_TYPE)
+    analyze(model)
+    if (not DEBUG):
+        log_pred(sample_image, sample_mask, model, logger, 'start')
+
+    # loss functions
+    losses, lossWeights = get_loss(model, LAMBDA)
+
+    # callbacks
+    logs = f'{MODEL_TYPE}{datetime.now().strftime("%Y%m%d-%H%M%S")}'
+    checkpoint_path = f'{MODEL_TYPE}{datetime.now().strftime("%Y%m%d-%H%M%S")}_ckpt'
+    callbacks = []
+    callbacks.append(tf.keras.callbacks.TensorBoard(log_dir = logs,
+                                                    histogram_freq = 1,
+                                                    profile_batch = '200,220'))
+    callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
+                                                    save_weights_only=True,
+                                                    save_best_only=True,
+                                                    verbose=1))
+    if (not DEBUG):
+        callbacks.append(LogPlotCallback(sample_image, sample_mask, logger))
+    # learning rate schedule
+    lr_decayed_fn = tf.keras.optimizers.schedules.CosineDecayRestarts(
+        args.initial_lr,
+        args.first_decay_epoch*STEPS_PER_EPOCH,
+        m_mul=args.m_mul,
+        alpha=10**-args.alpha)
+
+
+    # model training
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr_decayed_fn),
+                loss=losses, loss_weights=lossWeights,
+                metrics=['sparse_categorical_accuracy','mean_squared_error',SparseMeanIoU(num_classes=8)])
+
+    model_history = model.fit(train_batches, epochs=EPOCHS,
+                            steps_per_epoch=STEPS_PER_EPOCH,
+                            validation_steps=VALIDATION_STEPS,
+                            validation_data=test_batches,
+                            callbacks=callbacks)
+
+    model.save(MODEL_TYPE)
+    if (not DEBUG):
+        log_pred(sample_image, sample_mask, model, logger, 'end')
+        task.close()
