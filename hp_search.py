@@ -20,20 +20,20 @@ task = Task.init(project_name='Hyperparameter Optimization with BOHB',
                  task_name='Hyperparameter Search: semantic_segmentation',
                  task_type=Task.TaskTypes.optimizer,
                  reuse_last_task_id=False)
-configs = {'template_task_id': '91260b8389634fbca5c575ab51f07e7e'}
+configs = {'template_task_id': '7ba34ca01adf4d9796df81d58a98b8af'}
 configs = task.connect(configs)
 
 optimizer = HyperParameterOptimizer(
     base_task_id=configs['template_task_id'],  # experiment to optimize
     # hyper-parameters to optimize
     hyper_parameters=[
-        UniformIntegerParameterRange('General/epochs', min_value=10, max_value=100, step_size=2),
-        UniformIntegerParameterRange('General/batch_size', min_value=8, max_value=20, step_size=4),
-        UniformParameterRange('General/base_lr', min_value=0.00025, max_value=0.01, step_size=0.00025),
-        UniformIntegerParameterRange('General/first_decay_epoch', min_value=2, max_value=15, step_size=1),
-        UniformParameterRange('General/m_mul', min_value=0.1, max_value=0.9, step_size=0.05),
-        UniformParameterRange('General/alpha', min_value=1, max_value=3, step_size=0.5),
-        UniformParameterRange('General/lambda', min_value=0, max_value=0.3, step_size=0.0005),
+        UniformIntegerParameterRange('Args/epochs', min_value=10, max_value=100, step_size=2),
+        UniformIntegerParameterRange('Args/batch_size', min_value=8, max_value=20, step_size=4),
+        UniformParameterRange('Args/initial_lr', min_value=0.00025, max_value=0.01, step_size=0.00025),
+        UniformIntegerParameterRange('Args/first_decay_epoch', min_value=2, max_value=15, step_size=1),
+        UniformParameterRange('Args/m_mul', min_value=0.1, max_value=0.9, step_size=0.05),
+        UniformParameterRange('Args/alpha', min_value=1, max_value=3, step_size=0.5),
+        UniformParameterRange('Args/lambda_val', min_value=0, max_value=0.3, step_size=0.0005),
     ],
     # objective metric
     objective_metric_title='epoch_softmax_out_sparse_mean_iou',
@@ -63,7 +63,7 @@ top_exp = optimizer.get_top_experiments(top_k=k)
 print('Top {} experiments are:'.format(k))
 for n, t in enumerate(top_exp, 1):
     print('Rank {}: task id={} |result={}'
-          .format(n, t.id, t.get_last_scalar_metrics()['epoch_sparse_mean_iou']['validation: epoch_sparse_mean_iou']['last']))
+          .format(n, t.id, t.get_last_scalar_metrics()['epoch_softmax_out_sparse_mean_iou']['validation: epoch_softmax_out_sparse_mean_iou']['last']))
 optimizer.stop()
 print('Optimization done')
 task.close()
