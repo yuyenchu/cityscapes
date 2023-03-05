@@ -430,8 +430,12 @@ def get_eefm_cross_attention(CLASS_NUM = 3):
     x5q = layers.Conv2D(160, 1, padding='same', activation='relu')(x5)
     x5k = layers.Conv2D(160, 1, padding='same', activation='relu')(x5)
     x5v = layers.Conv2D(160, 1, padding='same', activation='relu')(x5)
-    x5a = layers.Attention(use_scale=True)([x5q, x5v, x5k])
-    x5 = layers.Add()([x5, x5a])
+    x5pa = layers.Attention(use_scale=True)([x5q, x5v, x5k])
+    x5t = layers.Conv2D(160, 1, padding='same', activation='relu')(x5)
+    x5t = tf.transpose(x5t, [0, 3, 1, 2])
+    x5ca = layers.Attention(use_scale=True)([x5t, x5t, x5t])
+    x5ca = tf.transpose(x5ca, [0, 2, 3, 1])
+    x5 = layers.Add()([x5, x5pa, x5ca])
     # up sample
     p5 = layers.Conv2DTranspose(160,3,2,padding='same',name='up5')(x5)
     # x4 = layers.Conv2D(160, 1, padding='same', activation='relu6')(x4)
@@ -586,6 +590,59 @@ class SparseMeanIoU(tf.keras.metrics.MeanIoU):
     def update_state(self, y_true, y_pred, sample_weight=None):
         y_pred = tf.math.argmax(y_pred, axis=-1)
         return super().update_state(y_true, y_pred, sample_weight)
+
+def get_emb(sin_inp):
+    """
+    Gets a base embedding for one dimension with sin and cos intertwined
+    """
+    emb = tf.stack((tf.sin(sin_inp), tf.cos(sin_inp)), -1)
+    emb = tf.reshape(emb, (*emb.shape[:-2], -1))
+    return emb
+
+class TFPositionalEncoding1D(tf.keras.layers.Layer):
+    def __init__(self, channels: int, dtype=tf.float32):
+        """
+        Args:
+            channels int: The last dimension of the tensor you want to apply pos emb to.
+        Keyword Args:
+            dtype: output type of the encodings. Default is "tf.float32".
+        """
+        super(TFPositionalEncoding1D, self).__init__()
+
+        self.channels = int(np.ceil(channels / 2) * 2)
+        self.inv_freq = np.float32(
+            1
+            / np.power(
+                10000, np.arange(0, self.channels, 2) / np.float32(self.channels)
+            )
+        )
+        self.cached_penc = None
+
+    @tf.function
+    def call(self, inputs):
+        """
+        :param tensor: A 3d tensor of size (batch_size, x, ch)
+        :return: Positional Encoding Matrix of size (batch_size, x, ch)
+        """
+        if len(inputs.shape) != 3:
+            raise RuntimeError("The input tensor has to be 3d!")
+
+        if self.cached_penc is not None and self.cached_penc.shape == inputs.shape:
+            return self.cached_penc
+
+        self.cached_penc = None
+        _, x, org_channels = inputs.shape
+
+        dtype = self.inv_freq.dtype
+        pos_x = tf.range(x, dtype=dtype)
+        sin_inp_x = tf.einsum("i,j->ij", pos_x, self.inv_freq)
+        emb = tf.expand_dims(get_emb(sin_inp_x), 0)
+        emb = emb[0]  # A bit of a hack
+        self.cached_penc = tf.repeat(
+            emb[None, :, :org_channels], tf.shape(inputs)[0], axis=0
+        )
+
+        return self.cached_penc 
     
 class PositionalEncoding2D(tf.keras.layers.Layer):
     def __init__(self, channels: int, dtype=tf.float32):
