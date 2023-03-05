@@ -486,7 +486,7 @@ class UnetDown_Block(tf.keras.layers.Layer):
     def call(self, x):
         x = self.conv1(x)
         x = self.conv2(x)
-        x = self.conv3(x)
+        out = self.conv3(x)
         return out
 
 def get_flops(model):
