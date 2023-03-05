@@ -62,7 +62,7 @@ def load_model(model, model_type=None):
 
 def log_pred(image, mask, model, logger, series):
     pred = model.predict(image[tf.newaxis, ...])
-    if (len(pred.shape) > 4):
+    if (isinstance(pred, list)):
         pred = pred[0]
     # print(tf.shape(pred))
     pred_mask = tf.argmax(pred, axis=-1)
