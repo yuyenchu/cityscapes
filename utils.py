@@ -936,7 +936,7 @@ def get_efm_v2(CLASS_NUM = 3):
     x4 = MNV3_Block(3,128,2,hswish,name='block4')(x3)
     x4, x4p = tf.split(x4,num_or_size_splits=2, axis=-1)
     x5 = MNV3_Block(3,256,2,hswish,name='block5')(x4)
-    # x5 = DualSelfAttention_Block(identity=True)(x5)
+    x5 = DualSelfAttention_Block(identity=True)(x5)
 
     # up sample with cross attention?
     # p5 = layers.Conv2DTranspose(128,3,2,padding='same',name='up5')(x5)
@@ -980,15 +980,15 @@ def get_efm_v2(CLASS_NUM = 3):
     # bottom-up augmentation
     n2 = layers.SeparableConv2D(32,3,2,padding='same',name='bottomup1')(p2)
     n2 = layers.Add(name='fuse5')([n2, p3])
-    # n2 = CCA_Block(name='fuse5')([n2, p3])
+    # n2 = CCA_Block(name='fuse5')([p3, n2])
 
     n3 = layers.SeparableConv2D(64,3,2,padding='same',name='bottomup2')(n2)
     n3 = layers.Add(name='fuse6')([n3, p4])
-    # n3 = CCA_Block(name='fuse6')([n3, p4])
+    # n3 = CCA_Block(name='fuse6')([p4, n3])
 
     n4 = layers.SeparableConv2D(128,3,2,padding='same',name='bottomup3')(n3)
     n4 = layers.Add(name='fuse7')([n4, p5])
-    # n4 = CCA_Block(name='fuse7')([n4, p5])
+    # n4 = CCA_Block(name='fuse7')([p5, n4])
 
     n5 = layers.SeparableConv2D(256,3,2,padding='same',name='bottomup4')(n4)
     # n5 = DualSelfAttention_Block(identity=True)(n5)
