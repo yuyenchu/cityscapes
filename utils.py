@@ -387,7 +387,6 @@ class MHSA_Block(tf.keras.layers.Layer):
         out = self.attention(q, v, k)
         return out
 
-
 class MHCA_Block(tf.keras.layers.Layer):
     def __init__(self, num_heads=1, name=None):
         super(MHCA_Block, self).__init__(name=name)
@@ -438,6 +437,43 @@ class MHCA_Block(tf.keras.layers.Layer):
         x2 = self.conv3(x2)
         x2 = self.bn2(x2)
         out = self.concat([x1,x2])
+        return out
+
+class CCA_Block(tf.keras.layers.Layer):
+    def __init__(self, name=None):
+        super(CCA_Block, self).__init__(name=name)
+        
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+        })
+        return config
+        
+    # input shape requires channel last
+    def build(self, input_shape): 
+        n1 = input_shape[0][-1]
+        n2 = input_shape[1][-1]
+        assert n1==n2
+        # self.query =  layers.Conv2D(n1, 1, padding='same', use_bias=False, activation='relu')
+        # self.key   =  layers.Conv2D(n1, 1, padding='same', use_bias=False, activation='relu')
+        # self.value =  layers.Conv2D(n1, 3, strides=2, padding='same', use_bias=False, activation='relu')
+        self.sigmoid = layers.Conv2D(n1, 1, padding='same', activation='sigmoid')
+        self.multiply = layers.Multiply()
+        self.bn = layers.BatchNormalization()
+        self.add = layers.Add()
+        self.attention = layers.Attention(use_scale=True)
+
+    # expect a list of 2 inputs [x1, x2], where x1 with shape(b, w1, h1, d) and x2 with shape(b, w2, h2, d)
+    def call(self, x):
+        x1, x2 = x
+        q = tf.transpose(x1, [0, 3, 1, 2])
+        v = tf.transpose(x2, [0, 3, 1, 2])
+        atten = self.attention([q, v, q])
+        atten = tf.transpose(atten, [0, 2, 3, 1])
+        atten = self.sigmoid(atten)
+        atten = self.bn(atten)
+        x2a = self.multiply([x2, atten])
+        out = self.add([x1, x2a])
         return out
 
 class Conv3_Block(tf.keras.layers.Layer):
@@ -898,57 +934,57 @@ def get_efm_v2(CLASS_NUM = 3):
     x5 = MNV3_Block(3,256,2,hswish,name='block5')(x4)
     x5 = DualSelfAttention_Block(identity=True)(x5)
 
-    # up sample
+    # up sample with cross attention?
+    # p5 = layers.Conv2DTranspose(128,3,2,padding='same',name='up5')(x5)
+    # x4a = layers.Attention(use_scale=True)([p5,x4p,p5])
+    # x4a = layers.Conv2D(64, 1, padding='same', activation='sigmoid')(x4a)
+    # x4p = layers.Multiply()([x4a, x4p])
+    # x4 = layers.Concatenate()([x4,x4p])
+    # p5 = layers.Add(name='fuse1')([p5, x4])
+
+    # p4 = layers.Conv2DTranspose(64,3,2,padding='same',name='up4')(p5)
+    # x3a = layers.Attention(use_scale=True)([p4,x3p,p4])
+    # x3a = layers.Conv2D(32, 1, padding='same', activation='sigmoid')(x3a)
+    # x3p = layers.Multiply()([x3a, x3p])
+    # x3 = layers.Concatenate()([x3,x3p])
+    # p4 = layers.Add(name='fuse2')([p4, x3])
+
+    # p3 = layers.Conv2DTranspose(32,3,2,padding='same',name='up3')(p4)
+    # x2a = layers.Attention(use_scale=True)([p3,x2p,p3])
+    # x2a = layers.Conv2D(16, 1, padding='same', activation='sigmoid')(x2a)
+    # x2p = layers.Multiply()([x2a, x2p])
+    # x2 = layers.Concatenate()([x2,x2p])
+    # p3 = layers.Add(name='fuse3')([p3, x2])
+
+    # p2 = layers.Conv2DTranspose(16,3,2,padding='same',name='up2')(p3)
+
+    # up sample with channel cross attention
     p5 = layers.Conv2DTranspose(128,3,2,padding='same',name='up5')(x5)
-    # p5t = tf.transpose(p5, [0, 3, 1, 2])
-    # x4pt = tf.transpose(x4p, [0, 3, 1, 2])
-    # x4a = layers.Attention(use_scale=True)([p5t,x4pt,p5t])
-    # x4a = tf.transpose(x4a, [0, 2, 3, 1])
-    x4a = layers.Attention(use_scale=True)([p5,x4p,p5])
-    x4a = layers.Conv2D(64, 1, padding='same', activation='sigmoid')(x4a)
-    x4p = layers.Multiply()([x4a, x4p])
     x4 = layers.Concatenate()([x4,x4p])
-    p5 = layers.Add(name='fuse1')([p5, x4])
+    p5 = CCA_Block(name='fuse1')([p5,x4])
 
     p4 = layers.Conv2DTranspose(64,3,2,padding='same',name='up4')(p5)
-    # p4t = tf.transpose(p5, [0, 3, 1, 2])
-    # x3pt = tf.transpose(x3p, [0, 3, 1, 2])
-    # x3a = layers.Attention(use_scale=True)([p4t,x3pt,p4t])
-    # x3a = tf.transpose(x3a, [0, 2, 3, 1])
-    x3a = layers.Attention(use_scale=True)([p4,x3p,p4])
-    x3a = layers.Conv2D(32, 1, padding='same', activation='sigmoid')(x3a)
-    x3p = layers.Multiply()([x3a, x3p])
     x3 = layers.Concatenate()([x3,x3p])
-    p4 = layers.Add(name='fuse2')([p4, x3])
+    p4 = CCA_Block(name='fuse2')([p4,x3])
 
     p3 = layers.Conv2DTranspose(32,3,2,padding='same',name='up3')(p4)
-    # p3t = tf.transpose(p3, [0, 3, 1, 2])
-    # x2pt = tf.transpose(x2p, [0, 3, 1, 2])
-    # x2a = layers.Attention(use_scale=True)([p3t,x2pt,p3t])
-    # x2a = tf.transpose(x2a, [0, 2, 3, 1])
-    x2a = layers.Attention(use_scale=True)([p3,x2p,p3])
-    x2a = layers.Conv2D(16, 1, padding='same', activation='sigmoid')(x2a)
-    x2p = layers.Multiply()([x2a, x2p])
     x2 = layers.Concatenate()([x2,x2p])
-    p3 = layers.Add(name='fuse3')([p3, x2])
+    p3 = CCA_Block(name='fuse3')([p3,x2])
 
     p2 = layers.Conv2DTranspose(16,3,2,padding='same',name='up2')(p3)
     
     # bottom-up augmentation
     n2 = layers.SeparableConv2D(32,3,2,padding='same',name='bottomup1')(p2)
-    # n2a = layers.Attention(use_scale=True)([n2, p3, n2])
-    # n2 = layers.Add(name='fuse5')([n2, n2a, p3])
-    n2 = layers.Add(name='fuse5')([n2, p3])
+    # n2 = layers.Add(name='fuse5')([n2, p3])
+    n2 = CCA_Block(name='fuse5')([n2, p3])
 
     n3 = layers.SeparableConv2D(64,3,2,padding='same',name='bottomup2')(n2)
-    # n3a = layers.Attention(use_scale=True)([n3, p4, n3])
-    # n3 = layers.Add(name='fuse6')([n3, n3a, p4])
-    n3 = layers.Add(name='fuse6')([n3, p4])
+    # n3 = layers.Add(name='fuse6')([n3, p4])
+    n3 = CCA_Block(name='fuse6')([n3, p4])
 
     n4 = layers.SeparableConv2D(128,3,2,padding='same',name='bottomup3')(n3)
-    # n4a = layers.Attention(use_scale=True)([n4, p5, n4])
-    # n4 = layers.Add(name='fuse7')([n4, n4a, p5])
-    n4 = layers.Add(name='fuse7')([n4, p5])
+    # n4 = layers.Add(name='fuse7')([n4, p5])
+    n4 = CCA_Block(name='fuse7')([n4, p5])
 
     n5 = layers.SeparableConv2D(256,3,2,padding='same',name='bottomup4')(n4)
     n5 = DualSelfAttention_Block(identity=True)(n5)
