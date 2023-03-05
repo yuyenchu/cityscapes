@@ -815,6 +815,7 @@ def get_eefm_cross_attention(CLASS_NUM = 3):
     n4a = layers.Attention(use_scale=True)([n4, p5, n4])
     n4 = layers.Add(name='fuse7')([n4, n4a, p5])
 
+    # auxiliary outputs
     n5 = layers.SeparableConv2D(256,3,2,padding='same',name='bottomup4')(n4)
     out_5 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n5)
     out_5 = layers.Resizing(416,416, name="aux_out4")(out_5)
@@ -828,6 +829,7 @@ def get_eefm_cross_attention(CLASS_NUM = 3):
     out_2 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n2)
     out_2 = layers.Resizing(416,416, name="aux_out1")(out_2)
 
+    # output
     out = layers.Concatenate()([n2,n3,n4,n5])
     out = layers.Conv2DTranspose(16,3,2,padding='same',name='out1')(out)
     out = layers.Conv2DTranspose(CLASS_NUM,3,2,padding='same',name='out2')(out)
@@ -888,16 +890,16 @@ def get_efm_v2(CLASS_NUM = 3):
     input = tf.keras.Input((416,416,3),name='input')
     x1 = MNV3_Block(3,16,2,hswish,name='block1')(input)
     x2 = MNV3_Block(5,32,2,name='block2')(x1)
-    x2 = DualSelfAttention_Block(identity=True)(x2)
+    # x2 = DualSelfAttention_Block(identity=True)(x2)
     x2, x2p = tf.split(x2,num_or_size_splits=2, axis=-1)
     x3 = MNV3_Block(3,64,2,hswish,name='block3')(x2)
-    x3 = DualSelfAttention_Block(identity=True)(x3)
+    # x3 = DualSelfAttention_Block(identity=True)(x3)
     x3, x3p = tf.split(x3,num_or_size_splits=2, axis=-1)
     x4 = MNV3_Block(3,128,2,hswish,name='block4')(x3)
-    x4 = DualSelfAttention_Block(identity=True)(x4)
+    # x4 = DualSelfAttention_Block(identity=True)(x4)
     x4, x4p = tf.split(x4,num_or_size_splits=2, axis=-1)
     x5 = MNV3_Block(3,256,2,hswish,name='block5')(x4)
-    x5 = DualSelfAttention_Block(identity=True)(x5)
+    # x5 = DualSelfAttention_Block(identity=True)(x5)
     # up sample
     p5 = layers.Conv2DTranspose(128,3,2,padding='same',name='up5')(x5)
     x4a = layers.Attention(use_scale=True)([p5,x4p,p5])
@@ -936,10 +938,8 @@ def get_efm_v2(CLASS_NUM = 3):
     n4 = layers.Add(name='fuse7')([n4, n4a, p5])
 
     n5 = layers.SeparableConv2D(256,3,2,padding='same',name='bottomup4')(n4)
-    n5 = layers.UpSampling2D(8)(n5)
-    n4 = layers.UpSampling2D(4)(n4)
-    n3 = layers.UpSampling2D(2)(n3)
 
+    # auxiliary outputs
     out_5 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n5)
     out_5 = layers.Resizing(416,416, name="aux_out4")(out_5)
     out_4 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n4)
@@ -949,14 +949,16 @@ def get_efm_v2(CLASS_NUM = 3):
     out_2 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n2)
     out_2 = layers.Resizing(416,416, name="aux_out1")(out_2)
 
+    # outputs
+    n5 = layers.UpSampling2D(8)(n5)
+    n4 = layers.UpSampling2D(4)(n4)
+    n3 = layers.UpSampling2D(2)(n3)
     out = layers.Concatenate()([n2,n3,n4,n5])
-    out = MNV3_Block(128,1,1)(out)
+    out = layers.Conv2D(128, 1, padding='same', activation='relu6')(out)
+    out = layers.Conv2D(64, 1, padding='same', activation='relu6')(out)
+    out = layers.Conv2D(32, 1, padding='same', activation='relu6')(out)
     out = DualSelfAttention_Block(identity=True)(out)
-    out = MNV3_Block(64,1,1)(out)
-    out = DualSelfAttention_Block(identity=True)(out)
-    out = layers.Conv2DTranspose(32,3,2,padding='same',name='out1')(out)
-    out = MNV3_Block(16,1,1)(out)
-    out = DualSelfAttention_Block(identity=True)(out)
+    out = layers.Conv2DTranspose(16,3,2,padding='same',name='out1')(out)
     out = layers.Conv2DTranspose(CLASS_NUM,3,2,padding='same',name='out2')(out)
     out = tf.keras.layers.Softmax(name='softmax_out')(out)
 
