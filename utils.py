@@ -468,7 +468,7 @@ class CCA_Block(tf.keras.layers.Layer):
         x1, x2 = x
         q = tf.transpose(x1, [0, 3, 1, 2])
         v = tf.transpose(x2, [0, 3, 1, 2])
-        atten = self.attention([q, v, q])
+        atten = self.attention([q, v])
         atten = tf.transpose(atten, [0, 2, 3, 1])
         atten = self.sigmoid(atten)
         atten = self.bn(atten)
