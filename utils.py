@@ -41,6 +41,112 @@ label_dict = {
     (  0,  0,142): 7
 }
 
+def get_emb(sin_inp):
+    """
+    Gets a base embedding for one dimension with sin and cos intertwined
+    """
+    emb = tf.stack((tf.sin(sin_inp), tf.cos(sin_inp)), -1)
+    emb = tf.reshape(emb, (*emb.shape[:-2], -1))
+    return emb
+
+class PositionalEncoding1D(tf.keras.layers.Layer):
+    def __init__(self, channels: int, dtype=tf.float32):
+        """
+        Args:
+            channels int: The last dimension of the tensor you want to apply pos emb to.
+        Keyword Args:
+            dtype: output type of the encodings. Default is "tf.float32".
+        """
+        super(PositionalEncoding1D, self).__init__()
+
+        self.channels = int(np.ceil(channels / 2) * 2)
+        self.inv_freq = np.float32(
+            1
+            / np.power(
+                10000, np.arange(0, self.channels, 2) / np.float32(self.channels)
+            )
+        )
+        self.cached_penc = None
+
+    @tf.function
+    def call(self, inputs):
+        """
+        :param tensor: A 3d tensor of size (batch_size, x, ch)
+        :return: Positional Encoding Matrix of size (batch_size, x, ch)
+        """
+        if len(inputs.shape) != 3:
+            raise RuntimeError("The input tensor has to be 3d!")
+
+        if self.cached_penc is not None and self.cached_penc.shape == inputs.shape:
+            return self.cached_penc
+
+        self.cached_penc = None
+        _, x, org_channels = inputs.shape
+
+        dtype = self.inv_freq.dtype
+        pos_x = tf.range(x, dtype=dtype)
+        sin_inp_x = tf.einsum("i,j->ij", pos_x, self.inv_freq)
+        emb = tf.expand_dims(get_emb(sin_inp_x), 0)
+        emb = emb[0]  # A bit of a hack
+        self.cached_penc = tf.repeat(
+            emb[None, :, :org_channels], tf.shape(inputs)[0], axis=0
+        )
+
+        return self.cached_penc 
+    
+class PositionalEncoding2D(tf.keras.layers.Layer):
+    def __init__(self, channels: int, dtype=tf.float32):
+        """
+        Args:
+            channels int: The last dimension of the tensor you want to apply pos emb to.
+        Keyword Args:
+            dtype: output type of the encodings. Default is "tf.float32".
+        """
+        super(PositionalEncoding2D, self).__init__()
+
+        self.channels = int(2 * np.ceil(channels / 4))
+        self.inv_freq = np.float32(
+            1
+            / np.power(
+                10000, np.arange(0, self.channels, 2) / np.float32(self.channels)
+            )
+        )
+        self.cached_penc = None
+
+    @tf.function
+    def call(self, inputs):
+        """
+        :param tensor: A 4d tensor of size (batch_size, x, y, ch)
+        :return: Positional Encoding Matrix of size (batch_size, x, y, ch)
+        """
+        if len(inputs.shape) != 4:
+            raise RuntimeError("The input tensor has to be 4d!")
+
+        if self.cached_penc is not None and self.cached_penc.shape == inputs.shape:
+            return self.cached_penc
+
+        self.cached_penc = None
+        _, x, y, org_channels = inputs.shape
+
+        dtype = self.inv_freq.dtype
+
+        pos_x = tf.range(x, dtype=dtype)
+        pos_y = tf.range(y, dtype=dtype)
+
+        sin_inp_x = tf.einsum("i,j->ij", pos_x, self.inv_freq)
+        sin_inp_y = tf.einsum("i,j->ij", pos_y, self.inv_freq)
+
+        emb_x = tf.expand_dims(get_emb(sin_inp_x), 1)
+        emb_y = tf.expand_dims(get_emb(sin_inp_y), 0)
+
+        emb_x = tf.tile(emb_x, (1, y, 1))
+        emb_y = tf.tile(emb_y, (x, 1, 1))
+        emb = tf.concat((emb_x, emb_y), -1)
+        self.cached_penc = tf.repeat(
+            emb[None, :, :, :org_channels], tf.shape(inputs)[0], axis=0
+        )
+        return self.cached_penc
+
 def SE_block(inputs, reduction_factor=2):
     input_channels = int(inputs.shape[-1])
     x = layers.GlobalAveragePooling2D()(inputs)
@@ -215,13 +321,14 @@ class MNV3_Block(tf.keras.layers.Layer):
 
 # mobilenet self attantion, replace se block with self attantion block
 class MNSA_Block(tf.keras.layers.Layer):
-    def __init__(self, kernel, filters, stride=1, activation=tf.nn.relu6, reduction_factor=4, name=None):
+    def __init__(self, kernel, filters, stride=1, activation=tf.nn.relu6, reduction_factor=1, dual_attention=True, name=None):
         super(MNSA_Block, self).__init__(name=name)
         self.kernel = kernel
         self.filters = filters
         self.stride = stride
         self.activation = activation
         self.reduction_factor = reduction_factor
+        self.dual_attention = dual_attention
 
     def get_config(self):
         config = super().get_config()
@@ -230,13 +337,17 @@ class MNSA_Block(tf.keras.layers.Layer):
             'filters': self.filters,
             'stride': self.stride,
             'activation': self.activation,
-            'reduction_factor': self.reduction_factor
+            'reduction_factor': self.reduction_factor,
+            'dual_attention': self.dual_attention
         })
         return config
 
     def build(self, input_shape):
         self.conv = Conv_Block(self.kernel, self.filters, self.stride, self.activation)
-        self.sa = SelfAttention_Block(self.reduction_factor)
+        if (self.dual_attention):
+            self.sa = DualSelfAttention_Block(self.reduction_factor, identity=True)
+        else:
+            self.sa = SelfAttention_Block(self.reduction_factor)
         self.out = layers.Conv2D(self.filters, 1, padding='same', activation=self.activation)
 
     def call(self, inputs):
@@ -244,7 +355,142 @@ class MNSA_Block(tf.keras.layers.Layer):
         x = self.sa(x)
         x = self.out(x)
         return x
-    
+
+class MHSA_Block(tf.keras.layers.Layer):
+    def __init__(self, num_heads=1, name=None):
+        super(MHSA_Block, self).__init__(name=name)
+        self.num_heads = num_heads
+        
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'num_heads': self.num_heads
+        })
+        return config
+        
+    # input shape requires channel last
+    def build(self, input_shape): 
+        n = input_shape[-1]
+        self.query =  layers.Conv2D(n, 1, padding='same', use_bias=False, activation='relu')
+        self.key   =  layers.Conv2D(n, 1, padding='same', use_bias=False, activation='relu')
+        self.value =  layers.Conv2D(n, 1, padding='same', use_bias=False, activation='relu')
+        self.attention = layers.MultiHeadAttention(self.num_heads, n)
+        self.encoding = PositionalEncoding2D(n)
+
+    def call(self, x):
+        x = self.encoding(x)
+        q, k, v = self.query(x), self.key(x), self.value(x)
+        out = self.attention(q, v, k)
+        return out
+
+
+class MHCA_Block(tf.keras.layers.Layer):
+    def __init__(self, num_heads=1, name=None):
+        super(MHCA_Block, self).__init__(name=name)
+        self.num_heads = num_heads
+        
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'num_heads': self.num_heads
+        })
+        return config
+        
+    # input shape requires channel last
+    def build(self, input_shape): 
+        n1 = input_shape[0][-1]
+        n2 = input_shape[1][-1]
+        self.query =  layers.Conv2D(n2, 1, padding='same', use_bias=False, activation='relu')
+        self.key   =  layers.Conv2D(n2, 1, padding='same', use_bias=False, activation='relu')
+        self.value =  layers.Conv2D(n1, 3, strides=2, padding='same', use_bias=False, activation='relu')
+        self.conv1 =  layers.Conv2D(n1, 1, padding='same', use_bias=False)
+        self.conv2 =  layers.Conv2D(n2, 3, padding='same', use_bias=False, activation='relu')
+        self.conv3 =  layers.Conv2D(n2//2, 1, padding='same', use_bias=False, activation='relu')
+        self.bn1 = layers.BatchNormalization()
+        self.bn2 = layers.BatchNormalization()
+        self.sigmoid = layers.Activation('sigmoid')
+        self.up1 = layers.UpSampling2D()
+        self.up2 = layers.UpSampling2D()
+        self.multiply = layers.Multiply()
+        self.concat = layers.Concatenate()
+        self.attention = layers.MultiHeadAttention(self.num_heads, n1)
+        self.encoding1 = PositionalEncoding2D(n1)
+        self.encoding2 = PositionalEncoding2D(n2)
+
+    # expect a list of 2 inputs [x1, x2], where x1 with shape(b, 2w, 2h, d) and x2 with shape(b, w, h, 2d)
+    def call(self, x):
+        x1, x2 = x
+        x1 = self.encoding1(x1)
+        x2 = self.encoding2(x2)
+        q, k, v = self.query(x2), self.key(x2), self.value(x1)
+        atten = self.attention(q, v, k)
+        atten = self.conv1(atten)
+        atten = self.bn1(atten)
+        atten = self.sigmoid(atten)
+        atten = self.up1(atten)
+        x1 = self.multiply([atten, x1])
+        x2 = self.up2(x2)
+        x2 = self.conv2(x2)
+        x2 = self.conv3(x2)
+        x2 = self.bn2(x2)
+        out = self.concat([x1,x2])
+        return out
+
+class Conv3_Block(tf.keras.layers.Layer):
+    def __init__(self, filters, name=None):
+        super(Conv3_Block, self).__init__(name=name)
+        self.filters = filters
+        
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'filters': self.filters
+        })
+        return config
+        
+    def build(self, input_shape): 
+        n = self.filters
+        self.conv1 = layers.Conv2D(n, 3, padding='same')
+        self.conv2 = layers.Conv2D(n, 3, padding='same')
+        self.conv3 = layers.Conv2D(n, 3, padding='same')
+        self.bn = layers.BatchNormalization()
+        self.relu = layers.ReLU()
+
+    def call(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.bn(x)
+        out = self.relu(x)
+        return out
+
+class UnetDown_Block(tf.keras.layers.Layer):
+    def __init__(self, filters, name=None):
+        super(UnetDown_Block, self).__init__(name=name)
+        self.filters = filters
+        
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'filters': self.filters
+        })
+        return config
+        
+    # input shape requires channel last
+    def build(self, input_shape): 
+        n = self.filters
+        self.conv1 = Conv3_Block(n)
+        self.conv2 = Conv3_Block(n)
+        self.conv3 = Conv3_Block(n)
+        self.pool = layers.MaxPool2D()
+
+    def call(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        out = self.pool(x)
+        return out
+
 def get_flops(model):
     concrete = tf.function(lambda inputs: model(inputs))
     concrete_func = concrete.get_concrete_function(
@@ -635,6 +881,38 @@ def get_enhanced_efm_small(CLASS_NUIM = 3):
 
     return tf.keras.Model(inputs=[input], outputs=[out])
 
+def get_unet_transformer(CLASS_NUM = 3, HEADS = 3):
+    input = tf.keras.Input((416,416,3))
+    x1 = UnetDown_Block(64)(input)
+    x2 = UnetDown_Block(128)(x1)
+    x3 = UnetDown_Block(256)(x2)
+    x4 = UnetDown_Block(512)(x3)
+    x4 = MHSA_Block(HEADS)(x4)
+    up1 = MHCA_Block(HEADS)([x3,x4])
+    up1 = Conv3_Block(256)(up1)
+    up2 = MHCA_Block(HEADS)([x2,up1])
+    up2 = Conv3_Block(128)(up2)
+    up3 = MHCA_Block(HEADS)([x1,up2])
+    up3 = Conv3_Block(64)(up3)
+    out = Conv3_Block(CLASS_NUM)(up3)
+    return tf.keras.Model(inputs=[input], outputs=[out])
+
+def get_munet_transformer(CLASS_NUM = 3, HEADS = 3):
+    input = tf.keras.Input((416,416,3))
+    x1 = MNV3_Block(3,64,2)(input)
+    x2 = MNV3_Block(3,128,2)(x1)
+    x3 = MNV3_Block(3,256,2)(x2)
+    x4 = MNV3_Block(3,512,2)(x3)
+    x4 = MHSA_Block(HEADS)(x4)
+    up1 = MHCA_Block(HEADS)([x3,x4])
+    up1 = Conv_Block(3,256,1)(up1)
+    up2 = MHCA_Block(HEADS)([x2,up1])
+    up2 = Conv_Block(3,128,1)(up2)
+    up3 = MHCA_Block(HEADS)([x1,up2])
+    up3 = Conv_Block(3,64,1)(up3)
+    out = Conv_Block(3,CLASS_NUM,1)(up3)
+    return tf.keras.Model(inputs=[input], outputs=[out])
+
 def rgb_2_id(img):
     return np.apply_along_axis(lambda x:label_dict.get(tuple(x),0), 2, img)
 
@@ -682,109 +960,3 @@ class SparseMeanIoU(tf.keras.metrics.MeanIoU):
     def update_state(self, y_true, y_pred, sample_weight=None):
         y_pred = tf.math.argmax(y_pred, axis=-1)
         return super().update_state(y_true, y_pred, sample_weight)
-
-def get_emb(sin_inp):
-    """
-    Gets a base embedding for one dimension with sin and cos intertwined
-    """
-    emb = tf.stack((tf.sin(sin_inp), tf.cos(sin_inp)), -1)
-    emb = tf.reshape(emb, (*emb.shape[:-2], -1))
-    return emb
-
-class TFPositionalEncoding1D(tf.keras.layers.Layer):
-    def __init__(self, channels: int, dtype=tf.float32):
-        """
-        Args:
-            channels int: The last dimension of the tensor you want to apply pos emb to.
-        Keyword Args:
-            dtype: output type of the encodings. Default is "tf.float32".
-        """
-        super(TFPositionalEncoding1D, self).__init__()
-
-        self.channels = int(np.ceil(channels / 2) * 2)
-        self.inv_freq = np.float32(
-            1
-            / np.power(
-                10000, np.arange(0, self.channels, 2) / np.float32(self.channels)
-            )
-        )
-        self.cached_penc = None
-
-    @tf.function
-    def call(self, inputs):
-        """
-        :param tensor: A 3d tensor of size (batch_size, x, ch)
-        :return: Positional Encoding Matrix of size (batch_size, x, ch)
-        """
-        if len(inputs.shape) != 3:
-            raise RuntimeError("The input tensor has to be 3d!")
-
-        if self.cached_penc is not None and self.cached_penc.shape == inputs.shape:
-            return self.cached_penc
-
-        self.cached_penc = None
-        _, x, org_channels = inputs.shape
-
-        dtype = self.inv_freq.dtype
-        pos_x = tf.range(x, dtype=dtype)
-        sin_inp_x = tf.einsum("i,j->ij", pos_x, self.inv_freq)
-        emb = tf.expand_dims(get_emb(sin_inp_x), 0)
-        emb = emb[0]  # A bit of a hack
-        self.cached_penc = tf.repeat(
-            emb[None, :, :org_channels], tf.shape(inputs)[0], axis=0
-        )
-
-        return self.cached_penc 
-    
-class PositionalEncoding2D(tf.keras.layers.Layer):
-    def __init__(self, channels: int, dtype=tf.float32):
-        """
-        Args:
-            channels int: The last dimension of the tensor you want to apply pos emb to.
-        Keyword Args:
-            dtype: output type of the encodings. Default is "tf.float32".
-        """
-        super(PositionalEncoding2D, self).__init__()
-
-        self.channels = int(2 * np.ceil(channels / 4))
-        self.inv_freq = np.float32(
-            1
-            / np.power(
-                10000, np.arange(0, self.channels, 2) / np.float32(self.channels)
-            )
-        )
-        self.cached_penc = None
-
-    @tf.function
-    def call(self, inputs):
-        """
-        :param tensor: A 4d tensor of size (batch_size, x, y, ch)
-        :return: Positional Encoding Matrix of size (batch_size, x, y, ch)
-        """
-        if len(inputs.shape) != 4:
-            raise RuntimeError("The input tensor has to be 4d!")
-
-        if self.cached_penc is not None and self.cached_penc.shape == inputs.shape:
-            return self.cached_penc
-
-        self.cached_penc = None
-        _, x, y, org_channels = inputs.shape
-
-        dtype = self.inv_freq.dtype
-
-        pos_x = tf.range(x, dtype=dtype)
-        pos_y = tf.range(y, dtype=dtype)
-
-        sin_inp_x = tf.einsum("i,j->ij", pos_x, self.inv_freq)
-        sin_inp_y = tf.einsum("i,j->ij", pos_y, self.inv_freq)
-
-        emb_x = tf.expand_dims(get_emb(sin_inp_x), 1)
-        emb_y = tf.expand_dims(get_emb(sin_inp_y), 0)
-
-        emb_x = tf.tile(emb_x, (1, y, 1))
-        emb_y = tf.tile(emb_y, (x, 1, 1))
-        emb = tf.concat((emb_x, emb_y), -1)
-        self.cached_penc = tf.repeat(
-            emb[None, :, :, :org_channels], tf.shape(inputs)[0], axis=0
-        )
-        return self.cached_penc

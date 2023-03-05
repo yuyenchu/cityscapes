@@ -116,7 +116,9 @@ models = {
     'eefm_attention': get_eefm_attention,
     'eefm_dual_attention': get_eefm_dual_attention,
     'eefm_cross_attention': get_eefm_cross_attention,
-    'enhanced_efm_small': get_enhanced_efm_small
+    'enhanced_efm_small': get_enhanced_efm_small,
+    'unet_treansformer': get_unet_transformer,
+    'm_unet_treansformer': get_munet_transformer
 }
 
 # start clearml task and get config
