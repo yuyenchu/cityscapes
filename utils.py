@@ -462,6 +462,7 @@ class CCA_Block(tf.keras.layers.Layer):
         self.bn = layers.BatchNormalization()
         self.add = layers.Add()
         self.attention = layers.Attention(use_scale=True)
+        # self.attention = layers.MultiHeadAttention(1,input_shape[1][-2]*input_shape[1][-3], attention_axes=1)
 
     # expect a list of 2 inputs [x1, x2], where x1 with shape(b, w1, h1, d) and x2 with shape(b, w2, h2, d)
     def call(self, x):
@@ -471,6 +472,7 @@ class CCA_Block(tf.keras.layers.Layer):
         k = tf.transpose(k, [0, 3, 1, 2])
         v = tf.transpose(v, [0, 3, 1, 2])
         atten = self.attention([q, v, k])
+        # atten = self.attention(q, v, k)
         atten = tf.transpose(atten, [0, 2, 3, 1])
         atten = self.sigmoid(atten)
         atten = self.bn(atten)
@@ -977,29 +979,29 @@ def get_efm_v2(CLASS_NUM = 3):
     
     # bottom-up augmentation
     n2 = layers.SeparableConv2D(32,3,2,padding='same',name='bottomup1')(p2)
-    # n2 = layers.Add(name='fuse5')([n2, p3])
-    n2 = CCA_Block(name='fuse5')([n2, p3])
+    n2 = layers.Add(name='fuse5')([n2, p3])
+    # n2 = CCA_Block(name='fuse5')([n2, p3])
 
     n3 = layers.SeparableConv2D(64,3,2,padding='same',name='bottomup2')(n2)
-    # n3 = layers.Add(name='fuse6')([n3, p4])
-    n3 = CCA_Block(name='fuse6')([n3, p4])
+    n3 = layers.Add(name='fuse6')([n3, p4])
+    # n3 = CCA_Block(name='fuse6')([n3, p4])
 
     n4 = layers.SeparableConv2D(128,3,2,padding='same',name='bottomup3')(n3)
-    # n4 = layers.Add(name='fuse7')([n4, p5])
-    n4 = CCA_Block(name='fuse7')([n4, p5])
+    n4 = layers.Add(name='fuse7')([n4, p5])
+    # n4 = CCA_Block(name='fuse7')([n4, p5])
 
     n5 = layers.SeparableConv2D(256,3,2,padding='same',name='bottomup4')(n4)
     # n5 = DualSelfAttention_Block(identity=True)(n5)
 
     # auxiliary outputs
-    out_5 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n5)
-    out_5 = layers.Resizing(416,416, name="aux_out4")(out_5)
-    out_4 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n4)
-    out_4 = layers.Resizing(416,416, name="aux_out3")(out_4)
-    out_3 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n3)
-    out_3 = layers.Resizing(416,416, name="aux_out2")(out_3)
-    out_2 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n2)
-    out_2 = layers.Resizing(416,416, name="aux_out1")(out_2)
+    # out_5 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n5)
+    # out_5 = layers.Resizing(416,416, name="aux_out4")(out_5)
+    # out_4 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n4)
+    # out_4 = layers.Resizing(416,416, name="aux_out3")(out_4)
+    # out_3 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n3)
+    # out_3 = layers.Resizing(416,416, name="aux_out2")(out_3)
+    # out_2 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n2)
+    # out_2 = layers.Resizing(416,416, name="aux_out1")(out_2)
 
     # outputs
     n5 = layers.UpSampling2D(8)(n5)
@@ -1015,7 +1017,7 @@ def get_efm_v2(CLASS_NUM = 3):
     out = layers.Conv2DTranspose(CLASS_NUM,3,2,padding='same',name='out2')(out)
     out = tf.keras.layers.Softmax(name='softmax_out')(out)
 
-    return tf.keras.Model(inputs=[input], outputs=[out, out_2, out_3, out_4, out_5])
+    return tf.keras.Model(inputs=[input], outputs=[out])
 
 def get_unet_transformer(CLASS_NUM = 3, HEADS = 3):
     input = tf.keras.Input((416,416,3))
