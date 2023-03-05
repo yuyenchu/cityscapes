@@ -427,8 +427,8 @@ def get_eefm_cross_attention(CLASS_NUM = 3):
     x4 = MNV3_Block(3,160,2,hswish,name='block4')(x3)
     x4, x4p = tf.split(x4,num_or_size_splits=2, axis=-1)
     x5 = MNV3_Block(3,160,2,hswish,name='block5')(x4)
-    x5a = layers.Attention(use_scale=True)([x5,x5])
-    x5 = layers.Add()([x5, x5a])
+    # x5a = layers.Attention(use_scale=True)([x5,x5])
+    # x5 = layers.Add()([x5, x5a])
     # up sample
     p5 = layers.Conv2DTranspose(160,3,2,padding='same',name='up5')(x5)
     # x4 = layers.Conv2D(160, 1, padding='same', activation='relu6')(x4)
@@ -583,3 +583,56 @@ class SparseMeanIoU(tf.keras.metrics.MeanIoU):
     def update_state(self, y_true, y_pred, sample_weight=None):
         y_pred = tf.math.argmax(y_pred, axis=-1)
         return super().update_state(y_true, y_pred, sample_weight)
+    
+class PositionalEncoding2D(tf.keras.layers.Layer):
+    def __init__(self, channels: int, dtype=tf.float32):
+        """
+        Args:
+            channels int: The last dimension of the tensor you want to apply pos emb to.
+        Keyword Args:
+            dtype: output type of the encodings. Default is "tf.float32".
+        """
+        super(PositionalEncoding2D, self).__init__()
+
+        self.channels = int(2 * np.ceil(channels / 4))
+        self.inv_freq = np.float32(
+            1
+            / np.power(
+                10000, np.arange(0, self.channels, 2) / np.float32(self.channels)
+            )
+        )
+        self.cached_penc = None
+
+    @tf.function
+    def call(self, inputs):
+        """
+        :param tensor: A 4d tensor of size (batch_size, x, y, ch)
+        :return: Positional Encoding Matrix of size (batch_size, x, y, ch)
+        """
+        if len(inputs.shape) != 4:
+            raise RuntimeError("The input tensor has to be 4d!")
+
+        if self.cached_penc is not None and self.cached_penc.shape == inputs.shape:
+            return self.cached_penc
+
+        self.cached_penc = None
+        _, x, y, org_channels = inputs.shape
+
+        dtype = self.inv_freq.dtype
+
+        pos_x = tf.range(x, dtype=dtype)
+        pos_y = tf.range(y, dtype=dtype)
+
+        sin_inp_x = tf.einsum("i,j->ij", pos_x, self.inv_freq)
+        sin_inp_y = tf.einsum("i,j->ij", pos_y, self.inv_freq)
+
+        emb_x = tf.expand_dims(get_emb(sin_inp_x), 1)
+        emb_y = tf.expand_dims(get_emb(sin_inp_y), 0)
+
+        emb_x = tf.tile(emb_x, (1, y, 1))
+        emb_y = tf.tile(emb_y, (x, 1, 1))
+        emb = tf.concat((emb_x, emb_y), -1)
+        self.cached_penc = tf.repeat(
+            emb[None, :, :, :org_channels], tf.shape(inputs)[0], axis=0
+        )
+        return self.cached_penc
