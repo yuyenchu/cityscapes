@@ -55,7 +55,6 @@ def load_model(model, model_type=None):
     try:
         model.load_weights(local_weights_path)
     except:
-        # model.load_weights('enhanced_efm20230215-160814')
         print('failed loading weights')
 
 def log_pred(image, mask, model, logger, series):
@@ -203,7 +202,8 @@ if __name__ == '__main__':
                             validation_steps=VALIDATION_STEPS,
                             validation_data=test_batches,
                             callbacks=callbacks)
-
+    
+    model.load_weights(checkpoint_path)
     model.save(MODEL_TYPE)
     if (not DEBUG):
         log_pred(sample_image, sample_mask, model, logger, 'end')
