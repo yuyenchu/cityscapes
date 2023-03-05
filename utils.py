@@ -144,7 +144,7 @@ class SelfAttention_Block(tf.keras.layers.Layer):
 
 class DualSelfAttention_Block(tf.keras.layers.Layer):
     def __init__(self, reduction_factor=1, identity=False, name=None):
-        super(SelfAttention_Block, self).__init__(name=name)
+        super(DualSelfAttention_Block, self).__init__(name=name)
         self.reduction_factor = reduction_factor
         self.identity = identity
         
