@@ -7,7 +7,7 @@ from datetime import datetime
 from clearml import Task, Dataset
 from utils import *
 
-DEBUG = True
+DEBUG = False
 
 # device capabilities
 physical_devices = tf.config.list_physical_devices('GPU')
@@ -122,6 +122,7 @@ models = {
     'eefm_dual_attention': get_eefm_dual_attention,
     'eefm_cross_attention': get_eefm_cross_attention,
     'enhanced_efm_small': get_enhanced_efm_small,
+    'efm_v2': get_efm_v2,
     'unet_transformer': get_unet_transformer,
     'm_unet_transformer': get_munet_transformer
 }
