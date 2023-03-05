@@ -58,7 +58,9 @@ def load_model(model, model_type=None):
         print('failed loading weights')
 
 def log_pred(image, mask, model, logger, series):
-    pred = model.predict(sample_image[tf.newaxis, ...])[0]
+    pred = model.predict(image[tf.newaxis, ...])
+    if (len(pred.shape) > 4):
+        pred = pred[0]
     # print(tf.shape(pred))
     pred_mask = tf.argmax(pred, axis=-1)
     pred_mask = pred_mask[..., tf.newaxis][0]
