@@ -482,13 +482,11 @@ class UnetDown_Block(tf.keras.layers.Layer):
         self.conv1 = Conv3_Block(n)
         self.conv2 = Conv3_Block(n)
         self.conv3 = Conv3_Block(n)
-        self.pool = layers.MaxPool2D()
 
     def call(self, x):
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
-        out = self.pool(x)
         return out
 
 def get_flops(model):
@@ -899,7 +897,7 @@ def get_unet_transformer(CLASS_NUM = 3, HEADS = 3):
 
 def get_munet_transformer(CLASS_NUM = 3, HEADS = 3):
     input = tf.keras.Input((416,416,3))
-    x1 = MNV3_Block(3,64,2)(input)
+    x1 = MNV3_Block(3,64,1)(input)
     x2 = MNV3_Block(3,128,1)(layers.MaxPool2D()(x1))
     x3 = MNV3_Block(3,256,1)(layers.MaxPool2D()(x2))
     x4 = layers.MaxPool2D()(x3)
