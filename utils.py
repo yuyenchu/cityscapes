@@ -430,39 +430,39 @@ def get_eefm_cross_attention(CLASS_NUM = 3):
     # up sample
     p5 = layers.Conv2DTranspose(160,3,2,padding='same',name='up5')(x5)
     # x4 = layers.Conv2D(160, 1, padding='same', activation='relu6')(x4)
-    x4a = layers.Attention(use_scale=True)([p5,x4p])
+    x4 = layers.Concatenate()([x4, x4p])
+    x4a = layers.Attention(use_scale=True)([p5, x4, p5])
     x4a = layers.Conv2D(80, 1, padding='same', activation='sigmoid')(x4a)
-    x4p = layers.Multiply()([x4a, x4p])
-    x4 = layers.Concatenate()([x4,x4p])
+    x4p = layers.Multiply()([x4a, x4])
     p5 = layers.Add(name='fuse1')([p5, x4])
 
     p4 = layers.Conv2DTranspose(80,3,2,padding='same',name='up4')(p5)
-    x3a = layers.Attention(use_scale=True)([p4,x3p])
+    x3 = layers.Concatenate()([x3, x3p])
+    x3a = layers.Attention(use_scale=True)([p4, x3, p4])
     x3a = layers.Conv2D(40, 1, padding='same', activation='sigmoid')(x3a)
-    x3p = layers.Multiply()([x3a, x3p])
-    x3 = layers.Concatenate()([x3,x3p])
+    x3 = layers.Multiply()([x3a, x3])
     p4 = layers.Add(name='fuse2')([p4, x3])
 
     p3 = layers.Conv2DTranspose(40,3,2,padding='same',name='up3')(p4)
-    x2a = layers.Attention(use_scale=True)([p3,x2p])
-    x2a = layers.Conv2D(20, 1, padding='same', activation='sigmoid')(x2a)
-    x2p = layers.Multiply()([x2a, x2p])
     x2 = layers.Concatenate()([x2,x2p])
+    x2a = layers.Attention(use_scale=True)([p3, x2, p3])
+    x2a = layers.Conv2D(20, 1, padding='same', activation='sigmoid')(x2a)
+    x2 = layers.Multiply()([x2a, x2])
     p3 = layers.Add(name='fuse3')([p3, x2])
 
     p2 = layers.Conv2DTranspose(16,3,2,padding='same',name='up2')(p3)
     
     # bottom-up augmentation
     n2 = layers.SeparableConv2D(40,3,2,padding='same',name='bottomup1')(p2)
-    n2a = layers.Attention(use_scale=True)([n2, p3])
+    n2a = layers.Attention(use_scale=True)([n2, p3, n2])
     n2 = layers.Add(name='fuse5')([n2, n2a, p3])
 
     n3 = layers.SeparableConv2D(80,3,2,padding='same',name='bottomup2')(n2)
-    n3a = layers.Attention(use_scale=True)([n3, p4])
+    n3a = layers.Attention(use_scale=True)([n3, p4, n3])
     n3 = layers.Add(name='fuse6')([n3, n3a, p4])
 
     n4 = layers.SeparableConv2D(160,3,2,padding='same',name='bottomup3')(n3)
-    n4a = layers.Attention(use_scale=True)([n4, p5])
+    n4a = layers.Attention(use_scale=True)([n4, p5, n4])
     n4 = layers.Add(name='fuse7')([n4, n4a, p5])
 
     n5 = layers.SeparableConv2D(320,3,2,padding='same',name='bottomup4')(n4)
