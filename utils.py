@@ -428,7 +428,7 @@ def get_eefm_cross_attention(CLASS_NUM = 3):
     x4, x4p = tf.split(x4,num_or_size_splits=2, axis=-1)
     x5 = MNV3_Block(3,160,2,hswish,name='block5')(x4)
     x5a = layers.Attention(use_scale=True)([x5,x5])
-    x5 = layers.Add(name='fuse1')([x5, x5a])
+    x5 = layers.Add()([x5, x5a])
     # up sample
     p5 = layers.Conv2DTranspose(160,3,2,padding='same',name='up5')(x5)
     # x4 = layers.Conv2D(160, 1, padding='same', activation='relu6')(x4)
