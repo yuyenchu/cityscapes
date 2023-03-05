@@ -933,12 +933,12 @@ def get_efm_v2(CLASS_NUM = 3):
     n3 = layers.SeparableConv2D(64,3,2,padding='same',name='bottomup2')(n2)
     # n3a = layers.Attention(use_scale=True)([n3, p4, n3])
     # n3 = layers.Add(name='fuse6')([n3, n3a, p4])
-    n3 = layers.Add(name='fuse5')([n3, p4])
+    n3 = layers.Add(name='fuse6')([n3, p4])
 
     n4 = layers.SeparableConv2D(128,3,2,padding='same',name='bottomup3')(n3)
     # n4a = layers.Attention(use_scale=True)([n4, p5, n4])
     # n4 = layers.Add(name='fuse7')([n4, n4a, p5])
-    n4 = layers.Add(name='fuse5')([n4, p5])
+    n4 = layers.Add(name='fuse7')([n4, p5])
 
     n5 = layers.SeparableConv2D(256,3,2,padding='same',name='bottomup4')(n4)
 
