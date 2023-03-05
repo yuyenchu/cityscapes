@@ -453,10 +453,10 @@ class CCA_Block(tf.keras.layers.Layer):
     def build(self, input_shape): 
         n1 = input_shape[0][-1]
         n2 = input_shape[1][-1]
-        assert n1==n2
-        # self.query =  layers.Conv2D(n1, 1, padding='same', use_bias=False, activation='relu')
-        # self.key   =  layers.Conv2D(n1, 1, padding='same', use_bias=False, activation='relu')
-        # self.value =  layers.Conv2D(n1, 3, strides=2, padding='same', use_bias=False, activation='relu')
+        assert n1 == n2
+        self.query =  layers.Conv2D(n1, 1, padding='same', use_bias=False, activation='relu')
+        self.key   =  layers.Conv2D(n1, 1, padding='same', use_bias=False, activation='relu')
+        self.value =  layers.Conv2D(n1, 1, padding='same', use_bias=False, activation='relu')
         self.sigmoid = layers.Conv2D(n1, 1, padding='same', activation='sigmoid')
         self.multiply = layers.Multiply()
         self.bn = layers.BatchNormalization()
@@ -466,9 +466,11 @@ class CCA_Block(tf.keras.layers.Layer):
     # expect a list of 2 inputs [x1, x2], where x1 with shape(b, w1, h1, d) and x2 with shape(b, w2, h2, d)
     def call(self, x):
         x1, x2 = x
-        q = tf.transpose(x1, [0, 3, 1, 2])
-        v = tf.transpose(x2, [0, 3, 1, 2])
-        atten = self.attention([q, v])
+        q, k, v = self.query(x1), self.key(x1), self.value(x2)
+        q = tf.transpose(q, [0, 3, 1, 2])
+        k = tf.transpose(k, [0, 3, 1, 2])
+        v = tf.transpose(v, [0, 3, 1, 2])
+        atten = self.attention([q, v, k])
         atten = tf.transpose(atten, [0, 2, 3, 1])
         atten = self.sigmoid(atten)
         atten = self.bn(atten)
