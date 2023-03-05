@@ -7,13 +7,16 @@ from datetime import datetime
 from clearml import Task, Dataset
 from utils import *
 
-DEBUG = False
+DEBUG = True
 
 # device capabilities
 physical_devices = tf.config.list_physical_devices('GPU')
 print("Tensorflow Version:",tf.__version__, ", GPU devices:",physical_devices)
 if (len(physical_devices) > 0):
-    config = tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    try:
+        tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    except:
+        print('='*10,"Error setting TF GPU memory growth",'='*10)
 
 def get_parser():
     parser = argparse.ArgumentParser(description='options for training')

@@ -762,19 +762,24 @@ def get_eefm_dual_attention(CLASS_NUM = 3):
     return tf.keras.Model(inputs=[input], outputs=[out, out_2, out_3, out_4, out_5])
 
 def get_eefm_cross_attention(CLASS_NUM = 3):
-    input = tf.keras.Input((416,416,3),name='input')
+    input = tf.keras.Input((416,416,3),name='input') #3534203934
+    # down convolution
     x1 = MNV3_Block(3,16,2,hswish,name='block1')(input)
+    x1 = MNV3_Block(3,16,1,hswish,name='block1_2')(x1) # 3598581090
     x2 = MNV3_Block(5,40,2,name='block2')(x1)
+    x2 = MNV3_Block(3,40,1,name='block2_2')(x2) # 3677755980
     x2, x2p = tf.split(x2,num_or_size_splits=2, axis=-1)
     x3 = MNV3_Block(3,80,2,hswish,name='block3')(x2)
+    x3 = MNV3_Block(3,80,1,hswish,name='block3_2')(x3) # 3753258400
     x3, x3p = tf.split(x3,num_or_size_splits=2, axis=-1)
     x4 = MNV3_Block(3,160,2,hswish,name='block4')(x3)
+    x4 = MNV3_Block(3,160,1,hswish,name='block4_2')(x4) # 3825643720
     x4, x4p = tf.split(x4,num_or_size_splits=2, axis=-1)
     x5 = MNV3_Block(3,160,2,hswish,name='block5')(x4)
     x5 = DualSelfAttention_Block(identity=True)(x5)
+
     # up sample
     p5 = layers.Conv2DTranspose(160,3,2,padding='same',name='up5')(x5)
-    # x4 = layers.Conv2D(160, 1, padding='same', activation='relu6')(x4)
     x4a = layers.Attention(use_scale=True)([p5, x4p, p5])
     x4a = layers.Conv2D(80, 1, padding='same', activation='sigmoid')(x4a)
     x4p = layers.Multiply()([x4a, x4p])
