@@ -979,16 +979,16 @@ def get_efm_v2(CLASS_NUM = 3):
     
     # bottom-up augmentation
     n2 = layers.SeparableConv2D(32,3,2,padding='same',name='bottomup1')(p2)
-    n2 = layers.Add(name='fuse5')([n2, p3])
-    # n2 = CCA_Block(name='fuse5')([p3, n2])
+    # n2 = layers.Add(name='fuse5')([n2, p3])
+    n2 = CCA_Block(name='fuse5')([p3, n2])
 
     n3 = layers.SeparableConv2D(64,3,2,padding='same',name='bottomup2')(n2)
-    n3 = layers.Add(name='fuse6')([n3, p4])
-    # n3 = CCA_Block(name='fuse6')([p4, n3])
+    # n3 = layers.Add(name='fuse6')([n3, p4])
+    n3 = CCA_Block(name='fuse6')([p4, n3])
 
     n4 = layers.SeparableConv2D(128,3,2,padding='same',name='bottomup3')(n3)
-    n4 = layers.Add(name='fuse7')([n4, p5])
-    # n4 = CCA_Block(name='fuse7')([p5, n4])
+    # n4 = layers.Add(name='fuse7')([n4, p5])
+    n4 = CCA_Block(name='fuse7')([p5, n4])
 
     n5 = layers.SeparableConv2D(256,3,2,padding='same',name='bottomup4')(n4)
     # n5 = DualSelfAttention_Block(identity=True)(n5)
@@ -1010,7 +1010,7 @@ def get_efm_v2(CLASS_NUM = 3):
     out = layers.Concatenate()([n2,n3,n4,n5])
     out = layers.Conv2D(128, 1, padding='same', activation='relu6')(out)
     out = layers.Conv2D(64, 1, padding='same', activation='relu6')(out)
-    out = layers.Conv2D(32, 1, padding='same', activation='relu6')(out)
+    # out = layers.Conv2D(32, 1, padding='same', activation='relu6')(out)
     # out = SE_Block()(out)
     # out = DualSelfAttention_Block(identity=True)(out)
     out = layers.Conv2DTranspose(16,3,2,padding='same',name='out1')(out)
