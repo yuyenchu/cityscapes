@@ -142,6 +142,43 @@ class SelfAttention_Block(tf.keras.layers.Layer):
         beta = tf.reshape(tf.matmul(h, beta, transpose_a=True), size) 
         return self.gamma * beta + x       
 
+class DualSelfAttention_Block(tf.keras.layers.Layer):
+    def __init__(self, reduction_factor=1, identity=False, name=None):
+        super(SelfAttention_Block, self).__init__(name=name)
+        self.reduction_factor = reduction_factor
+        self.identity = identity
+        
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'reduction_factor': self.reduction_factor,
+            'identity': self.identity
+        })
+        return config
+        
+    # input shape requires channel last
+    def build(self, input_shape): 
+        n = input_shape[-1]
+        r = self.reduction_factor
+        self.p_query =  layers.Conv2D(n//r, 1, padding='same', use_bias=False, activation='relu')
+        self.p_key   =  layers.Conv2D(n//r, 1, padding='same', use_bias=False, activation='relu')
+        self.p_value =  layers.Conv2D(n, 1, padding='same', use_bias=False, activation='relu')
+        self.c_conv  =  layers.Conv2D(n, 1, padding='same', use_bias=False, activation='relu')
+        self.position_attention =   layers.Attention(use_scale=True)
+        self.channel_attention  =   layers.Attention(use_scale=True)
+        self.fuse = layers.Add()
+
+    def call(self, x):
+        q, k, v = self.p_query(x), self.p_key(x), self.p_value(x)
+        pa = self.position_attention([q, v, k])
+        xt = tf.transpose(self.c_conv(x), [0, 3, 1, 2])
+        ca = self.channel_attention([xt, xt, xt])
+        ca = tf.transpose(ca, [0, 2, 3, 1])
+        if self.identity == True:
+            return self.fuse([x, pa, ca])
+        else:
+            return self.fuse([pa, ca])
+
 def hswish(x):
     return x * tf.nn.relu6(x + 3) / 6
 
@@ -417,6 +454,69 @@ def get_eefm_attention(CLASS_NUM = 3):
 
     return tf.keras.Model(inputs=[input], outputs=[out, out_2, out_3, out_4, out_5])
 
+def get_eefm_dual_attention(CLASS_NUM = 3):
+    # down sample with CSP
+    input = tf.keras.Input((416,416,3),name='input')
+    x1 = MNV3_Block(3,16,2,hswish,name='block1')(input)
+    x2 = MNV3_Block(5,40,2,name='block2')(x1)
+    x2, x2p = tf.split(x2,num_or_size_splits=2, axis=-1)
+    x3 = MNV3_Block(3,80,2,hswish,name='block3')(x2)
+    x3, x3p = tf.split(x3,num_or_size_splits=2, axis=-1)
+    x4 = MNV3_Block(3,160,2,hswish,name='block4')(x3)
+    x4, x4p = tf.split(x4,num_or_size_splits=2, axis=-1)
+    x5 = MNV3_Block(3,320,2,hswish,name='block5')(x4)
+    x5 = DualSelfAttention_Block(identity=True)(x5)
+    # up sample
+    p5 = layers.Conv2DTranspose(160,3,2,padding='same',name='up5')(x5)
+    x4 = layers.Concatenate()([x4,x4p])
+    x4a = DualSelfAttention_Block()(x4)
+    p5 = layers.Add(name='fuse1')([p5, x4, x4a])
+
+    p4 = layers.Conv2DTranspose(80,3,2,padding='same',name='up4')(p5)
+    x3 = layers.Concatenate()([x3,x3p])
+    x3a = DualSelfAttention_Block()(x3)
+    p4 = layers.Add(name='fuse2')([p4, x3, x3a])
+
+    p3 = layers.Conv2DTranspose(40,3,2,padding='same',name='up3')(p4)
+    x2 = layers.Concatenate()([x2,x2p])
+    x2a = DualSelfAttention_Block()(x2)
+    p3 = layers.Add(name='fuse3')([p3, x2, x2a])
+
+    p2 = layers.Conv2DTranspose(16,3,2,padding='same',name='up2')(p3)
+
+    # bottom-up augmentation
+    n2 = layers.SeparableConv2D(40,3,2,padding='same',name='bottomup1')(p2)
+    n2 = layers.Add(name='fuse5')([n2, p3])
+    n2 = DualSelfAttention_Block(identity=True)(n2)
+
+    n3 = layers.SeparableConv2D(80,3,2,padding='same',name='bottomup2')(n2)
+    n3 = layers.Add(name='fuse6')([n3, p4])
+    n3 = DualSelfAttention_Block(identity=True)(n3)
+
+    n4 = layers.SeparableConv2D(160,3,2,padding='same',name='bottomup3')(n3)
+    n4 = layers.Add(name='fuse7')([n4, p5])
+    n4 = DualSelfAttention_Block(identity=True)(n4)
+
+    n5 = layers.SeparableConv2D(320,3,2,padding='same',name='bottomup4')(n4)
+    out_5 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n5)
+    out_5 = layers.Resizing(416,416, name="aux_out4")(out_5)
+    n5 = layers.UpSampling2D(8)(n5)
+    out_4 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n4)
+    out_4 = layers.Resizing(416,416, name="aux_out3")(out_4)
+    n4 = layers.UpSampling2D(4)(n4)
+    out_3 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n3)
+    out_3 = layers.Resizing(416,416, name="aux_out2")(out_3)
+    n3 = layers.UpSampling2D(2)(n3)
+    out_2 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n2)
+    out_2 = layers.Resizing(416,416, name="aux_out1")(out_2)
+
+    out = layers.Concatenate()([n2,n3,n4,n5])
+    out = layers.Conv2DTranspose(16,3,2,padding='same',name='out1')(out)
+    out = layers.Conv2DTranspose(CLASS_NUM,3,2,padding='same',name='out2')(out)
+    out = tf.keras.layers.Softmax(name='softmax_out')(out)
+
+    return tf.keras.Model(inputs=[input], outputs=[out, out_2, out_3, out_4, out_5])
+
 def get_eefm_cross_attention(CLASS_NUM = 3):
     input = tf.keras.Input((416,416,3),name='input')
     x1 = MNV3_Block(3,16,2,hswish,name='block1')(input)
@@ -427,15 +527,7 @@ def get_eefm_cross_attention(CLASS_NUM = 3):
     x4 = MNV3_Block(3,160,2,hswish,name='block4')(x3)
     x4, x4p = tf.split(x4,num_or_size_splits=2, axis=-1)
     x5 = MNV3_Block(3,160,2,hswish,name='block5')(x4)
-    x5q = layers.Conv2D(160, 1, padding='same', activation='relu')(x5)
-    x5k = layers.Conv2D(160, 1, padding='same', activation='relu')(x5)
-    x5v = layers.Conv2D(160, 1, padding='same', activation='relu')(x5)
-    x5pa = layers.Attention(use_scale=True)([x5q, x5v, x5k])
-    x5t = layers.Conv2D(160, 1, padding='same', activation='relu')(x5)
-    x5t = tf.transpose(x5t, [0, 3, 1, 2])
-    x5ca = layers.Attention(use_scale=True)([x5t, x5t, x5t])
-    x5ca = tf.transpose(x5ca, [0, 2, 3, 1])
-    x5 = layers.Add()([x5, x5pa, x5ca])
+    x5 = DualSelfAttention_Block(identity=True)(x5)
     # up sample
     p5 = layers.Conv2DTranspose(160,3,2,padding='same',name='up5')(x5)
     # x4 = layers.Conv2D(160, 1, padding='same', activation='relu6')(x4)

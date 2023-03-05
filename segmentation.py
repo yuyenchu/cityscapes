@@ -27,7 +27,7 @@ def get_parser():
     parser.add_argument(
         '-c', '--continue', action='store_true', default=False, help='continue from last recorded task', dest='continue_train'
     )
-    parser.add_argument('--model_type', help='model type', default='eefm_cross_attention')
+    parser.add_argument('--model_type', help='model type', default='eefm_dual_attention')
     return parser
 
 def load_model(model, model_type=None):
@@ -114,6 +114,7 @@ models = {
     'enhanced_fpn': get_enhanced_fpn,
     'enhanced_efm': get_enhanced_efm,
     'eefm_attention': get_eefm_attention,
+    'eefm_dual_attention': get_eefm_dual_attention,
     'eefm_cross_attention': get_eefm_cross_attention,
     'enhanced_efm_small': get_enhanced_efm_small
 }
