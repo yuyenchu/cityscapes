@@ -960,7 +960,7 @@ def get_efm_v2(CLASS_NUM = 3):
     # out = SE_block(out)
     out = layers.Conv2D(32, 1, padding='same', activation='relu6')(out)
     # out = SE_block(out)
-    # out = DualSelfAttention_Block(identity=True)(out)
+    out = DualSelfAttention_Block(identity=True)(out)
     out = layers.Conv2DTranspose(16,3,2,padding='same',name='out1')(out)
     out = layers.Conv2DTranspose(CLASS_NUM,3,2,padding='same',name='out2')(out)
     out = tf.keras.layers.Softmax(name='softmax_out')(out)
