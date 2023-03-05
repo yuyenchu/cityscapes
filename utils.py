@@ -934,7 +934,7 @@ def get_efm_v2(CLASS_NUM = 3):
     x4 = MNV3_Block(3,128,2,hswish,name='block4')(x3)
     x4, x4p = tf.split(x4,num_or_size_splits=2, axis=-1)
     x5 = MNV3_Block(3,256,2,hswish,name='block5')(x4)
-    x5 = DualSelfAttention_Block(identity=True)(x5)
+    # x5 = DualSelfAttention_Block(identity=True)(x5)
 
     # up sample with cross attention?
     # p5 = layers.Conv2DTranspose(128,3,2,padding='same',name='up5')(x5)
@@ -989,7 +989,7 @@ def get_efm_v2(CLASS_NUM = 3):
     n4 = CCA_Block(name='fuse7')([n4, p5])
 
     n5 = layers.SeparableConv2D(256,3,2,padding='same',name='bottomup4')(n4)
-    n5 = DualSelfAttention_Block(identity=True)(n5)
+    # n5 = DualSelfAttention_Block(identity=True)(n5)
 
     # auxiliary outputs
     out_5 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n5)
@@ -1006,9 +1006,9 @@ def get_efm_v2(CLASS_NUM = 3):
     n4 = layers.UpSampling2D(4)(n4)
     n3 = layers.UpSampling2D(2)(n3)
     out = layers.Concatenate()([n2,n3,n4,n5])
-    out = layers.Conv2D(128, 1, padding='same', activation='relu6')(out)
-    out = layers.Conv2D(64, 1, padding='same', activation='relu6')(out)
-    out = layers.Conv2D(32, 1, padding='same', activation='relu6')(out)
+    # out = layers.Conv2D(128, 1, padding='same', activation='relu6')(out)
+    # out = layers.Conv2D(64, 1, padding='same', activation='relu6')(out)
+    # out = layers.Conv2D(32, 1, padding='same', activation='relu6')(out)
     # out = SE_Block()(out)
     # out = DualSelfAttention_Block(identity=True)(out)
     out = layers.Conv2DTranspose(16,3,2,padding='same',name='out1')(out)
