@@ -899,7 +899,7 @@ def get_efm_v2(CLASS_NUM = 3):
     # x4 = DualSelfAttention_Block(identity=True)(x4)
     x4, x4p = tf.split(x4,num_or_size_splits=2, axis=-1)
     x5 = MNV3_Block(3,256,2,hswish,name='block5')(x4)
-    x5 = DualSelfAttention_Block(identity=True)(x5)
+    # x5 = DualSelfAttention_Block(identity=True)(x5)
     # up sample
     p5 = layers.Conv2DTranspose(128,3,2,padding='same',name='up5')(x5)
     x4a = layers.Attention(use_scale=True)([p5,x4p,p5])
