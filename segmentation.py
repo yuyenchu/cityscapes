@@ -2,6 +2,7 @@ import argparse
 import tensorflow as tf
 import tensorflow.keras.layers as layers
 import numpy as np
+import math
 import matplotlib.pyplot as plt
 from datetime import datetime
 from clearml import Task, Dataset
@@ -21,6 +22,7 @@ if (len(physical_devices) > 0):
 def get_parser():
     parser = argparse.ArgumentParser(description='options for training')
     parser.add_argument('-e', '--epochs',     help='epochs to train',       type=int,   default=10)
+    parser.add_argument('-k', '--kfold',      help='kfold cross validation',type=int,   default=10)
     parser.add_argument('-b', '--batch_size', help='batch size per step',   type=int,   default=20)
     parser.add_argument('-f', '--first_decay_epoch', help='epochs for learning rate decay', type=int, default=5)
     parser.add_argument('-i', '--initial_lr', help='initial learning rate', type=float, default=0.005)
@@ -147,14 +149,16 @@ if __name__ == '__main__':
     # constants
     MODEL_TYPE = args.model_type
     EPOCHS = args.epochs
+    KFOLD = args.kfold
     BATCH_SIZE = args.batch_size
     LAMBDA = args.lambda_val
     VAL_SUBSPLITS = 5
     BUFFER_SIZE = BATCH_SIZE*2
     TRAIN_LENGTH = train_images.cardinality().numpy()
     TEST_LENGTH = test_images.cardinality().numpy()
+    SKIP_BATCH = math.ceil(TRAIN_LENGTH/KFOLD/BATCH_SIZE)
     VALIDATION_STEPS = TEST_LENGTH//BATCH_SIZE//VAL_SUBSPLITS
-    STEPS_PER_EPOCH = TRAIN_LENGTH // BATCH_SIZE
+    STEPS_PER_EPOCH = TRAIN_LENGTH // BATCH_SIZE - SKIP_BATCH
 
     # data processing
     train_batches = (
@@ -162,9 +166,10 @@ if __name__ == '__main__':
         .shuffle(BUFFER_SIZE, seed=0)
         .batch(BATCH_SIZE)
         .repeat()
+        .skip(SKIP_BATCH)
         .map(Augment())
         .prefetch(buffer_size=tf.data.AUTOTUNE))
-    test_batches = test_images.batch(BATCH_SIZE)
+    test_batches = test_images.repeat().batch(BATCH_SIZE)
     sample_image, sample_mask = next(iter(test_images.take(1)))
 
     # define model

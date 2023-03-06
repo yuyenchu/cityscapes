@@ -20,7 +20,7 @@ task = Task.init(project_name='Hyperparameter Optimization with BOHB',
                  task_name='Hyperparameter Search: semantic_segmentation',
                  task_type=Task.TaskTypes.optimizer,
                  reuse_last_task_id=False)
-configs = {'template_task_id': '7ba34ca01adf4d9796df81d58a98b8af'}
+configs = {'template_task_id': '689bb494cfc14029b81ed29fee8ca480'}
 configs = task.connect(configs)
 
 optimizer = HyperParameterOptimizer(
@@ -28,6 +28,7 @@ optimizer = HyperParameterOptimizer(
     # hyper-parameters to optimize
     hyper_parameters=[
         UniformIntegerParameterRange('Args/epochs', min_value=10, max_value=100, step_size=2),
+        UniformIntegerParameterRange('Args/kfold', min_value=5, max_value=20, step_size=1),
         UniformIntegerParameterRange('Args/batch_size', min_value=8, max_value=20, step_size=4),
         UniformParameterRange('Args/initial_lr', min_value=0.00025, max_value=0.01, step_size=0.00025),
         UniformIntegerParameterRange('Args/first_decay_epoch', min_value=2, max_value=15, step_size=1),
@@ -46,12 +47,12 @@ optimizer = HyperParameterOptimizer(
     # params
     execution_queue='default', 
     max_number_of_concurrent_tasks=1, 
-    optimization_time_limit=720,  # per task minutes
+    optimization_time_limit=1080,  # per task minutes
     compute_time_limit=90,  # total time minutes
-    total_max_jobs=70,  
+    total_max_jobs=100,  
     save_top_k_tasks_only=3,
     min_iteration_per_job=10,
-    max_iteration_per_job=100
+    max_iteration_per_job=200
 )
 task.execute_remotely(queue_name="services", exit_process=True)
 
