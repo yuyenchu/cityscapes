@@ -20,7 +20,7 @@ task = Task.init(project_name='Hyperparameter Optimization with BOHB',
                  task_name='Hyperparameter Search: semantic_segmentation',
                  task_type=Task.TaskTypes.optimizer,
                  reuse_last_task_id=False)
-configs = {'template_task_id': '689bb494cfc14029b81ed29fee8ca480'}
+configs = {'template_task_id': '0f01030c3d0442f5be5cdf8ed3ff323a'}
 configs = task.connect(configs)
 
 optimizer = HyperParameterOptimizer(
@@ -48,11 +48,11 @@ optimizer = HyperParameterOptimizer(
     # params
     execution_queue='default', 
     max_number_of_concurrent_tasks=1, 
-    optimization_time_limit=1080,  # per task minutes
-    compute_time_limit=90,  # total time minutes
-    total_max_jobs=100,  
+    optimization_time_limit=1800, # total time minutes
+    compute_time_limit=90, # optimize compute time
+    total_max_jobs=200,  
     save_top_k_tasks_only=3,
-    min_iteration_per_job=10,
+    min_iteration_per_job=20,
     max_iteration_per_job=200
 )
 task.execute_remotely(queue_name="services", exit_process=True)
