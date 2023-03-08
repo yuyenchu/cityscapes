@@ -1045,15 +1045,24 @@ def load_image(data_path):
     return input_image, input_mask
 
 class Augment(tf.keras.layers.Layer):
-    def __init__(self, seed=42):
+    def __init__(self, max_delta, seed=42):
         super().__init__()
         # both use the same seed, so they'll make the same random changes.
-        self.augment_inputs = tf.keras.layers.RandomFlip(mode="horizontal", seed=seed)
-        self.augment_labels = tf.keras.layers.RandomFlip(mode="horizontal", seed=seed)
+        self.augment_inputs1 = tf.keras.layers.RandomFlip(mode="horizontal", seed=seed)
+        self.augment_labels1 = tf.keras.layers.RandomFlip(mode="horizontal", seed=seed)
+        self.augment_inputs2 = tf.keras.layers.RandomZoom((0,-max_delta), (0,-max_delta), fill_mode='constant', seed=seed)
+        self.augment_labels2 = tf.keras.layers.RandomZoom((0,-max_delta), (0,-max_delta), fill_mode='constant', seed=seed)
+        self.augment_inputs3 = tf.keras.layers.RandomBrightness(max_delta, value_range=(0, 1.0), seed=seed)
+        self.augment_inputs4 = tf.keras.layers.RandomContrast(max_delta, seed=seed)
 
     def call(self, inputs, labels):
-        inputs = self.augment_inputs(inputs)
-        labels = self.augment_labels(labels)
+        inputs = self.augment_inputs1(inputs)
+        inputs = self.augment_inputs2(inputs)
+        inputs = self.augment_inputs3(inputs)
+        inputs = self.augment_inputs4(inputs)
+
+        labels = self.augment_labels1(labels)
+        labels = self.augment_labels2(labels)
         return inputs, labels
     
 # IoU metric for sparse category, IoU = TP/(TP+FP+FN)

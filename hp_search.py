@@ -30,10 +30,11 @@ optimizer = HyperParameterOptimizer(
         UniformIntegerParameterRange('Args/epochs', min_value=10, max_value=100, step_size=2),
         UniformIntegerParameterRange('Args/kfold', min_value=5, max_value=20, step_size=1),
         UniformIntegerParameterRange('Args/batch_size', min_value=8, max_value=20, step_size=4),
-        UniformParameterRange('Args/initial_lr', min_value=0.00025, max_value=0.01, step_size=0.00025),
+        UniformParameterRange('Args/initial_lr', min_value=0.00025, max_value=0.005, step_size=0.00025),
         UniformIntegerParameterRange('Args/first_decay_epoch', min_value=2, max_value=15, step_size=1),
         UniformParameterRange('Args/m_mul', min_value=0.1, max_value=0.9, step_size=0.05),
-        UniformParameterRange('Args/alpha', min_value=1, max_value=3, step_size=0.5),
+        UniformParameterRange('Args/alpha', min_value=1, max_value=3, step_size=0.25),
+        UniformParameterRange('Args/delta', min_value=0.001, max_value=0.2, step_size=0.001),
         UniformParameterRange('Args/lambda_val', min_value=0, max_value=0.3, step_size=0.0005),
     ],
     # objective metric

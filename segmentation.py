@@ -29,10 +29,11 @@ def get_parser():
     parser.add_argument('-m', '--m_mul',      help='cosine decay param',    type=float, default=0.7)
     parser.add_argument('-a', '--alpha',      help='cosine decay param',    type=float, default=3)
     parser.add_argument('-l', '--lambda',     help='cosine decay param',    type=float, default=0.02, dest='lambda_val')
+    parser.add_argument('-d', '--delta',      help='augmentation max delta',type=float, default=0.05)
     parser.add_argument(
         '-c', '--continue', action='store_true', default=False, help='continue from last recorded task', dest='continue_train'
     )
-    parser.add_argument('--model_type', help='model type', default='eefm_dual_attention')
+    parser.add_argument('--model_type', help='model type', default='efm_v2')
     return parser
 
 def load_model(model, model_type=None):
@@ -148,6 +149,7 @@ if __name__ == '__main__':
     
     # constants
     MODEL_TYPE = args.model_type
+    MAX_DELTA = args.delta
     EPOCHS = args.epochs
     KFOLD = args.kfold
     BATCH_SIZE = args.batch_size
@@ -167,7 +169,7 @@ if __name__ == '__main__':
         .batch(BATCH_SIZE)
         .repeat()
         .skip(SKIP_BATCH)
-        .map(Augment())
+        .map(Augment(MAX_DELTA))
         .prefetch(buffer_size=tf.data.AUTOTUNE))
     test_batches = test_images.repeat().batch(BATCH_SIZE)
     sample_image, sample_mask = next(iter(test_images.take(1)))
