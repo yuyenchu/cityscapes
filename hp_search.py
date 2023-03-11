@@ -20,7 +20,7 @@ task = Task.init(project_name='Hyperparameter Optimization with BOHB',
                  task_name='Hyperparameter Search: semantic_segmentation',
                  task_type=Task.TaskTypes.optimizer,
                  reuse_last_task_id=False)
-configs = {'template_task_id': '0f01030c3d0442f5be5cdf8ed3ff323a'}
+configs = {'template_task_id': '9eb821f90d264d829080fe983f1219d7'}
 configs = task.connect(configs)
 
 optimizer = HyperParameterOptimizer(
@@ -35,6 +35,7 @@ optimizer = HyperParameterOptimizer(
         UniformParameterRange('Args/m_mul', min_value=0.1, max_value=0.9, step_size=0.05),
         UniformParameterRange('Args/alpha', min_value=1, max_value=3, step_size=0.25),
         UniformParameterRange('Args/delta', min_value=0.001, max_value=0.2, step_size=0.001),
+        UniformParameterRange('Args/smooth', min_value=0.0, max_value=0.7, step_size=0.05),
         UniformParameterRange('Args/lambda_val', min_value=0, max_value=0.3, step_size=0.0005),
     ],
     # objective metric
