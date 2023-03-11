@@ -203,18 +203,20 @@ class Conv_Block(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bn1 = layers.BatchNormalization()
-        self.bn2 = layers.BatchNormalization()
-        self.p_conv = layers.Conv2D(self.filters, 1, padding='same', activation=self.activation)
-        self.d_conv = layers.DepthwiseConv2D(self.kernel, self.stride, 'same', activation=self.activation)
-        # self.conv = layers.SeparableConv2D(self.filters,self.kernel,self.stride,'same',activation=self.activation)
+        # self.bn2 = layers.BatchNormalization()
+        # self.p_conv = layers.Conv2D(self.filters, 1, padding='same', activation=self.activation)
+        # self.d_conv = layers.DepthwiseConv2D(self.kernel, self.stride, 'same', activation=self.activation)
+        self.conv = layers.SeparableConv2D(self.filters,self.kernel,self.stride,'same',activation=self.activation)
     
     def call(self, inputs):
-        x = self.p_conv(inputs)
+        # x = self.p_conv(inputs)
+        # x = self.bn1(x)
+        # x = self.d_conv(x)
+        # x = self.bn2(x)
+        # return x
+        x = self.conv(inputs)
         x = self.bn1(x)
-        x = self.d_conv(x)
-        x = self.bn2(x)
         return x
-        # return self.conv(inputs)
 
 class SelfAttention_Block(tf.keras.layers.Layer):
     def __init__(self, reduction_factor, name=None):
@@ -464,7 +466,7 @@ class CCA_Block(tf.keras.layers.Layer):
         self.attention = layers.Attention(use_scale=True)
         # self.attention = layers.MultiHeadAttention(1,input_shape[1][-2]*input_shape[1][-3], attention_axes=1)
 
-    # expect a list of 2 inputs [x1, x2], where x1 with shape(b, w1, h1, d) and x2 with shape(b, w2, h2, d)
+    # expect a list of 2 inputs [x1, x2], where x1 with shape(b, w, h, d) and x2 with shape(b, w, h, d)
     def call(self, x):
         x1, x2 = x
         q, k, v = self.query(x1), self.key(x1), self.value(x2)
@@ -531,6 +533,94 @@ class UnetDown_Block(tf.keras.layers.Layer):
         x = self.conv1(x)
         x = self.conv2(x)
         out = self.conv3(x)
+        return out
+
+class VOV_Block(tf.keras.layers.Layer):
+    def __init__(self, filters_out, n_layers, layer_filter=None, activation='relu6', reduction_factor=4, identity=False, use_mobile=False, name=None):
+        super(VOV_Block, self).__init__(name=name)
+        self.filters_out = filters_out
+        self.n_layers = n_layers
+        self.layer_filter = layer_filter
+        self.activation = activation
+        self.reduction_factor = reduction_factor
+        self.identity = identity
+        self.use_mobile = use_mobile
+        
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'filters_out': self.filters_out,
+            'layer_filter': self.layer_filter,
+            'n_layers': self.n_layers,
+            'activation': self.activation,
+            'reduction_factor': self.reduction_factor,
+            'identity': self.identity,
+            'use_mobile': self.use_mobile,
+        })
+        return config
+
+    # input shape requires channel last
+    def build(self, input_shape): 
+        n  = self.layer_filter if self.layer_filter is not None else input_shape[-1]
+        if (self.use_mobile):
+            self.convs = [Conv_Block(3, n, 1, activation=self.activation) for _ in range(self.n_layers)]
+        else:
+            self.convs = [layers.Conv2D(n, 3, padding='same', activation=self.activation) for _ in range(self.n_layers)]
+        self.conv_out = layers.Conv2D(self.filters_out, 1, padding='same', activation=self.activation)
+        self.se = SE_Block(self.reduction_factor)
+        if (self.identity):
+            self.add = layers.Add()
+
+    def call(self, inputs):
+        x = inputs
+        for c in self.convs:
+            x = c(x)
+        out = self.conv_out(x)
+        out = self.se(out)
+        if (self.identity):
+            out = self.add([inputs, out])
+        return out
+
+class ELAN_Block(tf.keras.layers.Layer):
+    def __init__(self, filters_out, n_layers, layer_filter=None, activation='relu6', reduction_factor=4, identity=False, use_mobile=False, name=None):
+        super(ELAN_Block, self).__init__(name=name)
+        self.filters_out = filters_out
+        self.n_layers = n_layers
+        self.layer_filter = layer_filter
+        self.activation = activation
+        self.reduction_factor = reduction_factor
+        self.identity = identity
+        self.use_mobile = use_mobile
+        
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'filters_out': self.filters_out,
+            'layer_filter': self.layer_filter,
+            'n_layers': self.n_layers,
+            'activation': self.activation,
+            'reduction_factor': self.reduction_factor,
+            'identity': self.identity,
+            'use_mobile': self.use_mobile,
+        })
+        return config
+
+    # input shape requires channel last
+    def build(self, input_shape): 
+        n = self.filters_out//2
+        self.vov = VOV_Block(n, self.n_layers, self.layer_filter, self.activation, self.reduction_factor, self.identity, self.use_mobile)
+        self.concat = layers.Concatenate()
+        if (self.use_mobile):
+            self.conv = Conv_Block(3, n, 1, activation=self.activation)
+        else:
+            self.conv = layers.Conv2D(n, 3, padding='same', activation=self.activation)
+
+    def call(self, inputs):
+        x1,x2 = tf.split(inputs,num_or_size_splits=2, axis=-1)
+        x1 = self.vov(x1)
+        x2 = self.conv(x2)
+        out = self.concat([x1,x2])
+
         return out
 
 def get_flops(model):
@@ -928,15 +1018,17 @@ def get_enhanced_efm_small(CLASS_NUIM = 3):
 
 def get_efm_v2(CLASS_NUM = 3):
     input = tf.keras.Input((416,416,3),name='input')
-    x1 = MNV3_Block(3,16,2,hswish,name='block1')(input)
+    x1 = MNV3_Block(3,16,2,hswish,name='block1-1')(input)
+    x1 = ELAN_Block(24,3,activation=hswish,use_mobile=True,name='block1-2')(x1)
     x2 = MNV3_Block(5,32,2,name='block2')(x1)
     x2, x2p = tf.split(x2,num_or_size_splits=2, axis=-1)
     x3 = MNV3_Block(3,64,2,hswish,name='block3')(x2)
     x3, x3p = tf.split(x3,num_or_size_splits=2, axis=-1)
     x4 = MNV3_Block(3,128,2,hswish,name='block4')(x3)
     x4, x4p = tf.split(x4,num_or_size_splits=2, axis=-1)
-    x5 = MNV3_Block(3,256,2,hswish,name='block5')(x4)
-    x5 = DualSelfAttention_Block(identity=True)(x5)
+    x5 = MNV3_Block(3,256,2,hswish,name='block5-1')(x4)
+    x5 = ELAN_Block(256,3,activation=hswish,use_mobile=True,name='block5-2')(x5)
+    x5 = DualSelfAttention_Block(identity=True,name='block5-3')(x5)
 
     # up sample with channel cross attention
     p5 = layers.Conv2DTranspose(128,3,2,padding='same',name='up5')(x5)
@@ -950,30 +1042,40 @@ def get_efm_v2(CLASS_NUM = 3):
     p3 = layers.Conv2DTranspose(32,3,2,padding='same',name='up3')(p4)
     x2 = layers.Concatenate()([x2,x2p])
     p3 = CCA_Block(name='fuse3')([p3,x2])
-
-    p2 = layers.Conv2DTranspose(16,3,2,padding='same',name='up2')(p3)
     
     # bottom-up augmentation
-    n2 = layers.SeparableConv2D(32,3,2,padding='same',name='bottomup1')(p2)
+    n1 = layers.Conv2DTranspose(24,3,2,padding='same',name='up2')(p3)
+    x1 = Conv_Block(3,24,1,activation='relu6')(x1)
+    n1 = layers.Add(name='fuse4')([n1, x1])
+
+    n2 = layers.SeparableConv2D(32,3,2,padding='same',name='bottomup1')(n1)
+    x2 = Conv_Block(3,32,1,activation='relu6')(x2)
     n2 = CCA_Block(name='fuse5')([p3, n2])
+    n2 = layers.Add()([x2, n2])
 
     n3 = layers.SeparableConv2D(64,3,2,padding='same',name='bottomup2')(n2)
+    x3 = Conv_Block(3,64,1,activation='relu6')(x3)
     n3 = CCA_Block(name='fuse6')([p4, n3])
+    n3 = layers.Add()([x3, n3])
 
     n4 = layers.SeparableConv2D(128,3,2,padding='same',name='bottomup3')(n3)
+    x4 = Conv_Block(3,128,1,activation='relu6')(x4)
     n4 = CCA_Block(name='fuse7')([p5, n4])
+    n4 = layers.Add()([x4, n4])
 
     n5 = layers.SeparableConv2D(256,3,2,padding='same',name='bottomup4')(n4)
+    x5 = Conv_Block(3,256,1,activation='relu6')(x5)
+    n5 = layers.Add()([x5, n5])
     n5 = DualSelfAttention_Block(identity=True)(n5)
 
     # auxiliary outputs
-    out_5 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n5)
+    out_5 = Conv_Block(3,CLASS_NUM,1,activation='relu6')(n5)
     out_5 = layers.Resizing(416,416, name="aux_out4")(out_5)
-    out_4 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n4)
+    out_4 = Conv_Block(3,CLASS_NUM,1,activation='relu6')(n4)
     out_4 = layers.Resizing(416,416, name="aux_out3")(out_4)
-    out_3 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n3)
+    out_3 = Conv_Block(3,CLASS_NUM,1,activation='relu6')(n3)
     out_3 = layers.Resizing(416,416, name="aux_out2")(out_3)
-    out_2 = layers.Conv2D(CLASS_NUM, 3, padding='same', activation='relu6')(n2)
+    out_2 = Conv_Block(3,CLASS_NUM,1,activation='relu6')(n2)    
     out_2 = layers.Resizing(416,416, name="aux_out1")(out_2)
 
     # outputs
@@ -982,7 +1084,7 @@ def get_efm_v2(CLASS_NUM = 3):
     n3 = layers.UpSampling2D(2)(n3)
     out = layers.Concatenate()([n2,n3,n4,n5])
     out = layers.Conv2D(128, 1, padding='same', activation='relu6')(out)
-    out = layers.Conv2D(64, 1, padding='same', activation='relu6')(out)
+    # out = layers.Conv2D(64, 1, padding='same', activation='relu6')(out)
     # out = layers.Conv2D(32, 1, padding='same', activation='relu6')(out)
     out = layers.Conv2DTranspose(16,3,2,padding='same',name='out1')(out)
     out = layers.Conv2DTranspose(CLASS_NUM,3,2,padding='same',name='out2')(out)
@@ -1045,24 +1147,15 @@ def load_image(data_path):
     return input_image, input_mask
 
 class Augment(tf.keras.layers.Layer):
-    def __init__(self, max_delta, seed=42):
+    def __init__(self, seed=42):
         super().__init__()
         # both use the same seed, so they'll make the same random changes.
-        self.augment_inputs1 = tf.keras.layers.RandomFlip(mode="horizontal", seed=seed)
-        self.augment_labels1 = tf.keras.layers.RandomFlip(mode="horizontal", seed=seed)
-        self.augment_inputs2 = tf.keras.layers.RandomZoom((0,-max_delta), (0,-max_delta), fill_mode='constant', seed=seed)
-        self.augment_labels2 = tf.keras.layers.RandomZoom((0,-max_delta), (0,-max_delta), fill_mode='constant', seed=seed)
-        self.augment_inputs3 = tf.keras.layers.RandomBrightness(max_delta, value_range=(0, 1.0), seed=seed)
-        self.augment_inputs4 = tf.keras.layers.RandomContrast(max_delta, seed=seed)
+        self.augment_inputs = tf.keras.layers.RandomFlip(mode="horizontal", seed=seed)
+        self.augment_labels = tf.keras.layers.RandomFlip(mode="horizontal", seed=seed)
 
     def call(self, inputs, labels):
-        inputs = self.augment_inputs1(inputs)
-        inputs = self.augment_inputs2(inputs)
-        inputs = self.augment_inputs3(inputs)
-        inputs = self.augment_inputs4(inputs)
-
-        labels = self.augment_labels1(labels)
-        labels = self.augment_labels2(labels)
+        inputs = self.augment_inputs(inputs)
+        labels = self.augment_labels(labels)
         return inputs, labels
     
 # IoU metric for sparse category, IoU = TP/(TP+FP+FN)
