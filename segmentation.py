@@ -31,6 +31,7 @@ def get_parser():
     parser.add_argument('-a', '--alpha',      help='cosine decay param',    type=float, default=3)
     parser.add_argument('-l', '--lambda',     help='cosine decay param',    type=float, default=0.02, dest='lambda_val')
     parser.add_argument('-d', '--delta',      help='augmentation max delta',type=float, default=0.05)
+    parser.add_argument('-s', '--smooth',     help='loss label smoothing',  type=float, default=0.2)
     parser.add_argument(
         '-c', '--continue', action='store_true', default=False, help='continue from last recorded task', dest='continue_train'
     )
@@ -83,7 +84,7 @@ def log_pred(image, mask, model, logger, series):
         plt.axis('off')
     logger.report_matplotlib_figure('Model Prediction', series, fig)
 
-def get_loss(model, l): 
+def get_loss(model, l, s): 
     assert l <= 1, 'auxiliary loss cannot be greater than main loss'
     lossDict = {}
     lossWeights = {}
@@ -95,7 +96,7 @@ def get_loss(model, l):
         elif 'aux_out' in n:
             try:
                 i = int(n.replace('aux_out',''))
-                lossDict[n] = SparseCategoricalCrossentropy(from_logits=True, label_smoothing=0.2, name=f"aux_loss_{i}")
+                lossDict[n] = SparseCategoricalCrossentropy(from_logits=True, label_smoothing=s, name=f"aux_loss_{i}")
                 lossWeights[n] = l**i
             except:
                 continue
@@ -155,6 +156,7 @@ if __name__ == '__main__':
     KFOLD = args.kfold
     BATCH_SIZE = args.batch_size
     LAMBDA = args.lambda_val
+    SMOOTH = args.smooth
     VAL_SUBSPLITS = 5
     BUFFER_SIZE = BATCH_SIZE*2
     TRAIN_LENGTH = train_images.cardinality().numpy()
@@ -186,7 +188,7 @@ if __name__ == '__main__':
         log_pred(sample_image, sample_mask, model, logger, 'start')
 
     # loss functions
-    losses, lossWeights = get_loss(model, LAMBDA)
+    losses, lossWeights = get_loss(model, LAMBDA, SMOOTH)
 
     # callbacks
     logs = f'{MODEL_TYPE}{datetime.now().strftime("%Y%m%d-%H%M%S")}'
@@ -212,7 +214,7 @@ if __name__ == '__main__':
     # model training
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr_decayed_fn),
                 loss=losses, loss_weights=lossWeights,
-                metrics={'softmax_out/Softmax:0':['sparse_categorical_accuracy','mean_squared_error',SparseMeanIoU(num_classes=8)]})
+                metrics={'softmax_out':['sparse_categorical_accuracy','mean_squared_error',SparseMeanIoU(num_classes=8)]})
 
     model_history = model.fit(train_batches, epochs=EPOCHS,
                             steps_per_epoch=STEPS_PER_EPOCH,
