@@ -1161,8 +1161,6 @@ class Augment(tf.keras.layers.Layer):
 # IoU metric for sparse category, IoU = TP/(TP+FP+FN)
 class SparseMeanIoU(tf.keras.metrics.MeanIoU):
     def __init__(self,
-               y_true=None,
-               y_pred=None,
                num_classes=None,
                name='sparse_mean_iou',
                dtype=None):
@@ -1171,3 +1169,22 @@ class SparseMeanIoU(tf.keras.metrics.MeanIoU):
     def update_state(self, y_true, y_pred, sample_weight=None):
         y_pred = tf.math.argmax(y_pred, axis=-1)
         return super().update_state(y_true, y_pred, sample_weight)
+
+class SparseCategoricalCrossentropy(tf.keras.losses.CategoricalCrossentropy):
+    # def __init__(self,
+    #             n_classes,
+    #             **kwargs):
+    #     self.n_classes = n_classes
+    #     super(SparseCategoricalCrossentropy, self).__init__(**kwargs)
+
+    # def get_config(self):
+    #     config = super().get_config()
+    #     config.update({
+    #         'n_classes': self.n_classes
+    #     })
+    #     return config
+
+    def call(self, y_true, y_pred):
+        n_classes = tf.shape(y_pred)[-1]
+        y_true = tf.one_hot(tf.cast(tf.squeeze(y_true,axis=-1),tf.int32), n_classes, axis=-1)
+        return super(SparseCategoricalCrossentropy, self).call(y_true, y_pred)

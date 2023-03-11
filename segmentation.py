@@ -95,7 +95,7 @@ def get_loss(model, l):
         elif 'aux_out' in n:
             try:
                 i = int(n.replace('aux_out',''))
-                lossDict[n] = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, name=f"aux_loss_{i}")
+                lossDict[n] = SparseCategoricalCrossentropy(from_logits=True, label_smoothing=0.2, name=f"aux_loss_{i}")
                 lossWeights[n] = l**i
             except:
                 continue
@@ -212,7 +212,7 @@ if __name__ == '__main__':
     # model training
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr_decayed_fn),
                 loss=losses, loss_weights=lossWeights,
-                metrics=['sparse_categorical_accuracy','mean_squared_error',SparseMeanIoU(num_classes=8)])
+                metrics={'softmax_out/Softmax:0':['sparse_categorical_accuracy','mean_squared_error',SparseMeanIoU(num_classes=8)]})
 
     model_history = model.fit(train_batches, epochs=EPOCHS,
                             steps_per_epoch=STEPS_PER_EPOCH,
