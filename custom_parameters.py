@@ -2,6 +2,8 @@ from itertools import product
 from typing import Mapping, Any, Sequence, Optional, Union, List
 from clearml.automation.parameters import Parameter
 
+import clearml.automation.parameters as parameters
+
 class UniformRange(Parameter):
     """
     Uniform randomly sampled hyper-parameter object.
@@ -134,6 +136,9 @@ class NargsParameterSet(Parameter):
         combinations = list(product(*[v.to_list() for v in self.values]))
         return [{self.name: c} for c in combinations]
 
+setattr(parameters, NargsParameterSet.__name__, NargsParameterSet)
+setattr(parameters, UniformIntegerRange.__name__, UniformIntegerRange)
+setattr(parameters, UniformRange.__name__, UniformRange)
 
 if __name__=="__main__":
     print(NargsParameterSet('Args/smooth', parameter_combinations=[
