@@ -5,10 +5,10 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 from datetime import datetime
-from clearml import Task, Dataset
+from clearml import Task, Dataset, OutputModel
 from utils import *
 
-DEBUG = False
+DEBUG = True
 
 # device capabilities
 physical_devices = tf.config.list_physical_devices('GPU')
@@ -28,10 +28,11 @@ def get_parser():
     parser.add_argument('-f', '--first_decay_epoch', help='epochs for learning rate decay', type=int, default=5)
     parser.add_argument('-i', '--initial_lr', help='initial learning rate', type=float, default=0.005)
     parser.add_argument('-m', '--m_mul',      help='cosine decay param',    type=float, default=0.7)
+    parser.add_argument('-t', '--t_mul',      help='cosine decay param',    type=float, default=2.0)
     parser.add_argument('-a', '--alpha',      help='cosine decay param',    type=float, default=3)
-    parser.add_argument('-l', '--lambda',     help='cosine decay param',    type=float, default=0.02, dest='lambda_val')
+    parser.add_argument('-l', '--lambda',     help='cosine decay param',    type=float, default=0.02, dest='lambda_val', nargs="+",)
     parser.add_argument('-d', '--delta',      help='augmentation max delta',type=float, default=0.05)
-    parser.add_argument('-s', '--smooth',     help='loss label smoothing',  type=float, default=0.2)
+    parser.add_argument('-s', '--smooth',     help='loss label smoothing',  type=float, default=0.2, nargs="+",)
     parser.add_argument(
         '-c', '--continue', action='store_true', default=False, help='continue from last recorded task', dest='continue_train'
     )
@@ -66,9 +67,22 @@ def load_model(model, model_type=None):
         print('failed loading weights')
 
 def log_pred(image, mask, model, logger, series):
-    pred = model.predict(image[tf.newaxis, ...])
-    if (isinstance(pred, list)):
-        pred = pred[0]
+    predOut = model.predict(image[tf.newaxis, ...])
+    if (isinstance(predOut, list)):
+        pred = predOut[0]
+        auxOut = len(predOut[1:])
+        if (auxOut>0):
+            fig = plt.figure(figsize=(15, 15))
+            for i, p in enumerate(predOut[1:]):
+                m = tf.argmax(p, axis=-1)
+                m = m[..., tf.newaxis][0]
+                plt.subplot(1, auxOut, i+1)
+                plt.title(f'Aux Out {i+1}')
+                plt.imshow(tf.keras.utils.array_to_img(m))
+                plt.axis('off')
+            logger.report_matplotlib_figure('Model Auxiliary Prediction', series, fig)
+    else:
+        pred = predOut
     # print(tf.shape(pred))
     pred_mask = tf.argmax(pred, axis=-1)
     pred_mask = pred_mask[..., tf.newaxis][0]
@@ -85,7 +99,12 @@ def log_pred(image, mask, model, logger, series):
     logger.report_matplotlib_figure('Model Prediction', series, fig)
 
 def get_loss(model, l, s): 
-    assert l <= 1, 'auxiliary loss cannot be greater than main loss'
+    assert (type(l)==int and l <= 1) or all([i<=1 for i in l]), 'auxiliary loss cannot be greater than main loss'
+    assert (type(s)==int and s < 0.5) or all([i<0.5 for i in s]), 'label smoothing  cannot be greater than 0.5'
+    aux = len([i for i in model.outputs if 'aux_out' in i])
+    assert type(l)==int or len(l)==aux, 'length auxiliary loss weights different from auxiliary outputs'
+    assert type(s)==int or len(s)==aux, 'length loss label smoothing different from auxiliary outputs'
+
     lossDict = {}
     lossWeights = {}
     for node in model.outputs:
@@ -96,8 +115,10 @@ def get_loss(model, l, s):
         elif 'aux_out' in n:
             try:
                 i = int(n.replace('aux_out',''))
-                lossDict[n] = SparseCategoricalCrossentropy(from_logits=True, label_smoothing=s, name=f"aux_loss_{i}")
-                lossWeights[n] = l**i
+                ll = l if type(l)==int else l[i-1]
+                ss = s if type(s)==int else s[i-1]
+                lossDict[n] = SparseCategoricalCrossentropy(from_logits=True, label_smoothing=ss, name=f"aux_loss_{i}")
+                lossWeights[n] = ll
             except:
                 continue
     if 'softmax_out' not in lossDict.keys():
@@ -135,6 +156,7 @@ models = {
 # start clearml task and get config
 if (not DEBUG):
     task = Task.init(project_name='semantic_segmentation', task_name='cityscapes segmentation', output_uri='http://192.168.0.152:8081')
+    task.set_model_label_enumeration(label_names)
     logger = task.get_logger()
 
 # get dataset
@@ -148,8 +170,8 @@ if __name__ == '__main__':
     parser = get_parser()
     args = parser.parse_args()  
     print('configs =',args)
-    
-    # constants
+
+    # arg constants
     MODEL_TYPE = args.model_type
     MAX_DELTA = args.delta
     EPOCHS = args.epochs
@@ -157,13 +179,14 @@ if __name__ == '__main__':
     BATCH_SIZE = args.batch_size
     LAMBDA = args.lambda_val
     SMOOTH = args.smooth
-    VAL_SUBSPLITS = 5
+    #training constants
+    VAL_SUBSPLITS = 1
     BUFFER_SIZE = BATCH_SIZE*2
     TRAIN_LENGTH = train_images.cardinality().numpy()
     TEST_LENGTH = test_images.cardinality().numpy()
     SKIP_BATCH = math.ceil(TRAIN_LENGTH/KFOLD/BATCH_SIZE)
-    VALIDATION_STEPS = TEST_LENGTH//BATCH_SIZE//VAL_SUBSPLITS
-    STEPS_PER_EPOCH = TRAIN_LENGTH // BATCH_SIZE - SKIP_BATCH
+    VALIDATION_STEPS = math.ceil(TEST_LENGTH/BATCH_SIZE)//VAL_SUBSPLITS
+    STEPS_PER_EPOCH = math.ceil(TRAIN_LENGTH/BATCH_SIZE) - SKIP_BATCH
 
     # data processing
     train_batches = (
@@ -198,6 +221,8 @@ if __name__ == '__main__':
                                                     histogram_freq = 1,
                                                     profile_batch = '200,220'))
     callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
+                                                    monitor='val_sparse_mean_iou',
+                                                    mode='max',
                                                     save_weights_only=True,
                                                     save_best_only=True,
                                                     verbose=1))
@@ -226,4 +251,5 @@ if __name__ == '__main__':
     model.save(MODEL_TYPE)
     if (not DEBUG):
         log_pred(sample_image, sample_mask, model, logger, 'end')
+        # output_model = OutputModel(task=task, framework="Keras", name=MODEL_TYPE, tags=[MODEL_TYPE, "segmentation", "kskip"])
         task.close()

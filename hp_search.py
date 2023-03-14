@@ -1,6 +1,7 @@
-from clearml.automation import UniformParameterRange, UniformIntegerParameterRange
+from clearml.automation import UniformParameterRange, UniformIntegerParameterRange, ParameterSet
 from clearml.automation import HyperParameterOptimizer
 from clearml.automation.hpbandster import OptimizerBOHB
+from custom_parameters import NargsParameterSet, UniformRange
 
 from clearml import Task
 
@@ -27,21 +28,38 @@ optimizer = HyperParameterOptimizer(
     base_task_id=configs['template_task_id'],  # experiment to optimize
     # hyper-parameters to optimize
     hyper_parameters=[
+        # training sizes
         UniformIntegerParameterRange('Args/epochs', min_value=10, max_value=100, step_size=2),
         UniformIntegerParameterRange('Args/kfold', min_value=5, max_value=20, step_size=1),
         UniformIntegerParameterRange('Args/batch_size', min_value=8, max_value=20, step_size=4),
+        # learning rate
         UniformParameterRange('Args/initial_lr', min_value=0.00025, max_value=0.005, step_size=0.00025),
-        UniformIntegerParameterRange('Args/first_decay_epoch', min_value=2, max_value=15, step_size=1),
-        UniformParameterRange('Args/m_mul', min_value=0.1, max_value=0.9, step_size=0.05),
+        UniformIntegerParameterRange('Args/first_decay_epoch', min_value=2, max_value=17, step_size=1),
+        UniformParameterRange('Args/m_mul', min_value=0.3, max_value=0.95, step_size=0.05),
+        UniformParameterRange('Args/t_mul', min_value=1, max_value=4, step_size=0.25),
         UniformParameterRange('Args/alpha', min_value=1, max_value=3, step_size=0.25),
-        UniformParameterRange('Args/delta', min_value=0.001, max_value=0.2, step_size=0.001),
-        UniformParameterRange('Args/smooth', min_value=0.0, max_value=0.7, step_size=0.05),
+        # augmentation level
+        UniformParameterRange('Args/delta', min_value=0, max_value=0.2, step_size=0.005),
+        # loss param and loss weights
+        UniformParameterRange('Args/smooth', min_value=0.0, max_value=0.5, step_size=0.05, include_max_value=False),
         UniformParameterRange('Args/lambda_val', min_value=0, max_value=0.3, step_size=0.0005),
+        # NargsParameterSet('Args/smooth', parameter_combinations=[
+        #     UniformRange(min_value=0.0, max_value=0.5, step_size=0.05, include_max_value=False),
+        #     UniformRange(min_value=0.0, max_value=0.5, step_size=0.05, include_max_value=False),
+        #     UniformRange(min_value=0.0, max_value=0.5, step_size=0.05, include_max_value=False),
+        #     UniformRange(min_value=0.0, max_value=0.5, step_size=0.05, include_max_value=False),
+        # ]),
+        # NargsParameterSet('Args/lambda_val', parameter_combinations=[
+        #     UniformRange(min_value=0.0, max_value=0.3, step_size=0.001),
+        #     UniformRange(min_value=0.0, max_value=0.3, step_size=0.001),
+        #     UniformRange(min_value=0.0, max_value=0.3, step_size=0.001),
+        #     UniformRange(min_value=0.0, max_value=0.3, step_size=0.001),
+        # ]),
     ],
     # objective metric
     objective_metric_title='epoch_softmax_out_sparse_mean_iou',
     objective_metric_series='validation: epoch_softmax_out_sparse_mean_iou',
-    objective_metric_sign='max',
+    objective_metric_sign='max_global',
 
     # optimizer algorithm
     optimizer_class=OptimizerBOHB,

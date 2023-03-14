@@ -3,6 +3,17 @@ import tensorflow.keras.layers as layers
 from tensorflow.python.framework.convert_to_constants import  convert_variables_to_constants_v2_as_graph
 import numpy as np
 
+label_names = {
+    'void': 0, 
+    'flat': 1, 
+    'construction': 2, 
+    'object': 3, 
+    'nature': 4, 
+    'sky': 5, 
+    'human': 6, 
+    'vehicle': 7,
+}
+
 label_dict = {
     (  0,  0,  0): 0, 
     (  0,  0,  0): 0, 
