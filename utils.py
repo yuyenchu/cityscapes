@@ -1038,8 +1038,8 @@ def get_efm_v2(CLASS_NUM = 3):
     x4 = MNV3_Block(3,128,2,hswish,name='block4')(x3)
     x4, x4p = tf.split(x4,num_or_size_splits=2, axis=-1)
     x5 = MNV3_Block(3,256,2,hswish,name='block5-1')(x4)
-    x5 = ELAN_Block(256,3,activation=hswish,use_mobile=True,name='block5-2')(x5)
-    x5 = DualSelfAttention_Block(identity=True,name='block5-3')(x5)
+    x5 = DualSelfAttention_Block(identity=True,name='block5-2')(x5)
+    x5 = ELAN_Block(256,3,activation=hswish,use_mobile=True,name='block5-3')(x5)
 
     # up sample with channel cross attention
     p5 = layers.Conv2DTranspose(128,3,2,padding='same',name='up5')(x5)
@@ -1077,7 +1077,7 @@ def get_efm_v2(CLASS_NUM = 3):
     n5 = layers.SeparableConv2D(256,3,2,padding='same',name='bottomup4')(n4)
     x5 = Conv_Block(3,256,1,activation='relu6')(x5)
     n5 = layers.Add()([x5, n5])
-    n5 = DualSelfAttention_Block(identity=True)(n5)
+    n5 = ELAN_Block(256,3,activation=hswish,use_mobile=True,name='bottomup4-2')(n5)
 
     # auxiliary outputs
     out_5 = Conv_Block(3,CLASS_NUM,1,activation='relu6')(n5)
