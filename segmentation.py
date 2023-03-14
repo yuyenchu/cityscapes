@@ -5,10 +5,10 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 from datetime import datetime
-from clearml import Task, Dataset, OutputModel
+from clearml import Task, Dataset
 from utils import *
 
-DEBUG = True
+DEBUG = False
 
 # device capabilities
 physical_devices = tf.config.list_physical_devices('GPU')
@@ -101,7 +101,8 @@ def log_pred(image, mask, model, logger, series):
 def get_loss(model, l, s): 
     assert (type(l)==int and l <= 1) or all([i<=1 for i in l]), 'auxiliary loss cannot be greater than main loss'
     assert (type(s)==int and s < 0.5) or all([i<0.5 for i in s]), 'label smoothing  cannot be greater than 0.5'
-    aux = len([i for i in model.outputs if 'aux_out' in i])
+    print('model outputs:',model.outputs)
+    aux = len([i for i in model.outputs if 'aux_out' in i.name])
     assert type(l)==int or len(l)==aux, 'length auxiliary loss weights different from auxiliary outputs'
     assert type(s)==int or len(s)==aux, 'length loss label smoothing different from auxiliary outputs'
 
@@ -137,7 +138,7 @@ class LogPlotCallback(tf.keras.callbacks.Callback):
     
     def on_epoch_end(self, epoch, logs=None):
         if (epoch%10==0):
-            log_pred(self.image, self.mask, self.model, self.logger, f'epoch: {epoch}')
+            log_pred(self.image, self.mask, self.model, self.logger, f'epoch:{epoch}')
 
 # define model type options
 models = {
@@ -187,7 +188,14 @@ if __name__ == '__main__':
     SKIP_BATCH = math.ceil(TRAIN_LENGTH/KFOLD/BATCH_SIZE)
     VALIDATION_STEPS = math.ceil(TEST_LENGTH/BATCH_SIZE)//VAL_SUBSPLITS
     STEPS_PER_EPOCH = math.ceil(TRAIN_LENGTH/BATCH_SIZE) - SKIP_BATCH
-
+    print('='*20, 'Training Info', '='*20)
+    print('TRAIN_LENGTH =',TRAIN_LENGTH)
+    print('TEST_LENGTH =',TEST_LENGTH)
+    print('SKIP_BATCH =',SKIP_BATCH)
+    print('VALIDATION_STEPS =',VALIDATION_STEPS)
+    print('STEPS_PER_EPOCH =',STEPS_PER_EPOCH)
+    print('='*21, 'End of Info', '='*21)
+    
     # data processing
     train_batches = (
         train_images
@@ -197,7 +205,7 @@ if __name__ == '__main__':
         .skip(SKIP_BATCH)
         .map(Augment(MAX_DELTA))
         .prefetch(buffer_size=tf.data.AUTOTUNE))
-    test_batches = test_images.repeat().batch(BATCH_SIZE)
+    test_batches = test_images.batch(BATCH_SIZE).repeat()
     sample_image, sample_mask = next(iter(test_images.take(1)))
 
     # define model
@@ -221,10 +229,11 @@ if __name__ == '__main__':
                                                     histogram_freq = 1,
                                                     profile_batch = '200,220'))
     callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
-                                                    monitor='val_sparse_mean_iou',
+                                                    monitor='val_softmax_out_sparse_mean_iou',
                                                     mode='max',
                                                     save_weights_only=True,
                                                     save_best_only=True,
+                                                    initial_value_threshold=0.0,
                                                     verbose=1))
     if (not DEBUG):
         callbacks.append(LogPlotCallback(sample_image, sample_mask, logger))
@@ -251,5 +260,4 @@ if __name__ == '__main__':
     model.save(MODEL_TYPE)
     if (not DEBUG):
         log_pred(sample_image, sample_mask, model, logger, 'end')
-        # output_model = OutputModel(task=task, framework="Keras", name=MODEL_TYPE, tags=[MODEL_TYPE, "segmentation", "kskip"])
         task.close()
