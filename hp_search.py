@@ -4,6 +4,7 @@ from clearml.automation.hpbandster import OptimizerBOHB
 from custom_parameters import NargsParameterSet, UniformRange
 
 from clearml import Task
+from custom_bohb import CustomOptimizerBOHB
 
 def job_complete_callback(
     job_id,                 # type: str
@@ -62,7 +63,7 @@ optimizer = HyperParameterOptimizer(
     objective_metric_sign='max_global',
 
     # optimizer algorithm
-    optimizer_class=OptimizerBOHB,
+    optimizer_class=CustomOptimizerBOHB,
     
     # params
     execution_queue='default', 
