@@ -37,7 +37,11 @@ class _CustomTrainsBandsterWorker(bandster._TrainsBandsterWorker):
 
     def compute(self, config, budget, **kwargs):
         # do somrthing with config
-        nargs_config = {k:[config[vv] for vv in v] for k,v in self.nargs_mapping.items()}
+        nargs_config = {}
+        for k,v in self.nargs_mapping.items():
+            nargs_config[k] = [config[vv] for vv in v] 
+            config.pop(k, None)
+        config.update(nargs_config)
         super(_CustomTrainsBandsterWorker, self).compute(config, budget, **kwargs)
 
 class CustomOptimizerBOHB(bandster.OptimizerBOHB):
