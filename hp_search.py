@@ -45,10 +45,10 @@ optimizer = HyperParameterOptimizer(
         # UniformParameterRange('Args/smooth', min_value=0.0, max_value=0.5, step_size=0.05, include_max_value=False),
         # UniformParameterRange('Args/lambda_val', min_value=0, max_value=0.3, step_size=0.0005),
         NargsParameterSet('Args/smooth', parameter_combinations=[
-            UniformRange(min_value=0.0, max_value=0.5, step_size=0.05, include_max_value=False),
-            UniformRange(min_value=0.0, max_value=0.5, step_size=0.05, include_max_value=False),
-            UniformRange(min_value=0.0, max_value=0.5, step_size=0.05, include_max_value=False),
-            UniformRange(min_value=0.0, max_value=0.5, step_size=0.05, include_max_value=False),
+            UniformRange(min_value=0.0, max_value=0.4, step_size=0.05, include_max_value=False),
+            UniformRange(min_value=0.0, max_value=0.4, step_size=0.05, include_max_value=False),
+            UniformRange(min_value=0.0, max_value=0.4, step_size=0.05, include_max_value=False),
+            UniformRange(min_value=0.0, max_value=0.45, step_size=0.05, include_max_value=False),
         ]),
         NargsParameterSet('Args/lambda_val', parameter_combinations=[
             UniformRange(min_value=0.0, max_value=0.3, step_size=0.001),
