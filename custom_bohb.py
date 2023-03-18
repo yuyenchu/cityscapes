@@ -39,7 +39,7 @@ class _CustomTrainsBandsterWorker(bandster._TrainsBandsterWorker):
         # do somrthing with config
         nargs_config = {}
         for k,v in self.nargs_mapping.items():
-            nargs_config[k] = [config[vv] for vv in v] 
+            nargs_config[k] = [config.pop(vv) for vv in v] 
             config.pop(k, None)
         config.update(nargs_config)
         super(_CustomTrainsBandsterWorker, self).compute(config, budget, **kwargs)
