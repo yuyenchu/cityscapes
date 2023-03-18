@@ -108,7 +108,7 @@ class UniformIntegerRange(Parameter):
         if self.include_max and (not values or values[-1] < self.max_value):
             values.append(self.max_value)
         return values
-    
+
 class NargsParameterSet(Parameter):
     def __init__(self, name, parameter_combinations=[]):
         # type: (str, List[Union[UniformRange, UniformIntegerRange]]) -> ()
@@ -117,7 +117,16 @@ class NargsParameterSet(Parameter):
         :param list parameter_combinations: The list/tuple of valid parameter combinations.
         """
         super(NargsParameterSet, self).__init__(name=name)
-        self.values = parameter_combinations
+        self.values = []
+        for i, p in enumerate(parameter_combinations):
+            locals()[str(i)] = p
+            self.values.append(str(i))
+        self.__dict__.update(locals())
+        del self.__dict__['self']
+        del self.__dict__['__class__']
+        del self.__dict__['i']
+        del self.__dict__['p']
+        del self.__dict__['parameter_combinations']
 
     def get_value(self):
         # type: () -> Mapping[str, List[Any]]
@@ -125,7 +134,7 @@ class NargsParameterSet(Parameter):
         Return uniformly sampled value from the valid list of values.
         :return: {self.name: random entry from self.value}
         """
-        return {self.name: [v.get_value() for v in self.values]}
+        return {self.name: [getattr(self, v).get_value() for v in self.values]}
 
     def to_list(self):
         # type: () -> Sequence[Mapping[str, Any]]
@@ -133,24 +142,34 @@ class NargsParameterSet(Parameter):
         Return a list of all the valid values of the Parameter.
         :return: list of dicts {name: value}
         """
-        combinations = list(product(*[v.to_list() for v in self.values]))
+        combinations = list(product(*[getattr(self, v).to_list() for v in self.values]))
         return [{self.name: c} for c in combinations]
 
+    def to_dict(self):
+        # type: () -> Mapping[str, Union[str, Parameter]]
+        """
+        Return a dict representation of the Parameter object. Used for serialization of the Parameter object.
+        :return:  dict representation of the object (serialization).
+        """
+        serialize = {self._class_type_serialize_name: str(self.__class__).split('.')[-1][:-2]}
+        # noinspection PyCallingNonCallable
+        serialize.update(dict(((k, v.to_dict() if hasattr(v, 'to_dict') else v) for k, v in self.__dict__.items())))
+        return serialize
 setattr(parameters, NargsParameterSet.__name__, NargsParameterSet)
 setattr(parameters, UniformIntegerRange.__name__, UniformIntegerRange)
 setattr(parameters, UniformRange.__name__, UniformRange)
 
 if __name__=="__main__":
-    print(NargsParameterSet('Args/smooth', parameter_combinations=[
+    nargs = NargsParameterSet('Args/smooth', parameter_combinations=[
                 UniformRange(min_value=0.0, max_value=1, step_size=0.5, include_max_value=False),
                 UniformRange(min_value=1, max_value=2, step_size=0.5, include_max_value=False),
                 UniformRange(min_value=2, max_value=3, step_size=0.5, include_max_value=False),
                 UniformRange(min_value=3, max_value=4, step_size=0.5, include_max_value=False),
-            ]).to_list())
-
-    print(NargsParameterSet('Args/smooth', parameter_combinations=[
-                UniformRange(min_value=0.0, max_value=1, step_size=0.5, include_max_value=False),
-                UniformRange(min_value=1, max_value=2, step_size=0.5, include_max_value=False),
-                UniformRange(min_value=2, max_value=3, step_size=0.5, include_max_value=False),
-                UniformRange(min_value=3, max_value=4, step_size=0.5, include_max_value=False),
-            ]).get_value())
+            ])
+    print(dict(nargs.__dict__.items()))
+    print(nargs.to_list())
+    print(nargs.get_value())
+    print(nargs.to_dict())
+    print(Parameter.from_dict(nargs.to_dict()).values)
+    print(Parameter.from_dict(nargs.to_dict()).__dict__['0'].name)
+    print(Parameter.from_dict(nargs.to_dict()).__dict__['0'].min_value)
