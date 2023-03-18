@@ -2,7 +2,8 @@ import clearml.automation.hpbandster.bandster as bandster
 
 from nanoid import generate
 from time import time
-from clearml.automation import DiscreteParameterRange, UniformParameterRange, RandomSeed, UniformIntegerParameterRange, Parameter
+from clearml.automation import DiscreteParameterRange, UniformParameterRange, UniformIntegerParameterRange
+from clearml.automation.parameters import RandomSeed, Parameter
 from clearml import Task
 try:
     # noinspection PyPackageRequirements
@@ -23,7 +24,7 @@ except ImportError:
 
 from custom_parameters import NargsParameterSet, UniformRange, UniformIntegerRange
 
-class _CustomTrainsBandsterWorker(bandster.TrainsBandsterWorker):
+class _CustomTrainsBandsterWorker(bandster._TrainsBandsterWorker):
     def __init__(
             self,
             *args,  # type: Any
@@ -41,8 +42,9 @@ class _CustomTrainsBandsterWorker(bandster.TrainsBandsterWorker):
 
 class CustomOptimizerBOHB(bandster.OptimizerBOHB):
     def __init__(self, **kwargs):
-        super(CustomOptimizerBOHB, self).__init__(**kwargs)
         self.nargs_mapping = {}
+        super(CustomOptimizerBOHB, self).__init__(**kwargs)
+
     def start(self):
         # type: () -> None
         fake_run_id = 'OptimizerBOHB_{}'.format(time())
@@ -87,9 +89,11 @@ class CustomOptimizerBOHB(bandster.OptimizerBOHB):
                 hp = CSH.CategoricalHyperparameter(p.name, choices=p.values)
             elif isinstance(p, NargsParameterSet):
                 list_name = p.name
+                # print(p.__dict__)
                 self.nargs_mapping[list_name] = []
-                for pp in p:
+                for v in p.values:
                     self.nargs_mapping[list_name].append(generate())
+                    pp = getattr(p, v)
                     if isinstance(pp, UniformRange):
                         cs.add_hyperparameter(CSH.UniformFloatHyperparameter(
                             self.nargs_mapping[list_name][-1], lower=pp.min_value, upper=pp.max_value, log=False, q=pp.step_size))
@@ -98,6 +102,7 @@ class CustomOptimizerBOHB(bandster.OptimizerBOHB):
                             self.nargs_mapping[list_name][-1], lower=pp.min_value, upper=pp.max_value, log=False, q=pp.step_size))
                     else:
                         raise ValueError("HyperParameter type {} not supported yet inside NargsParameterSet with OptimizerBOHB".format(type(pp)))
+                continue
             else:
                 raise ValueError("HyperParameter type {} not supported yet with OptimizerBOHB".format(type(p)))
             cs.add_hyperparameter(hp)
