@@ -30,9 +30,10 @@ def get_parser():
     parser.add_argument('-m', '--m_mul',      help='cosine decay param',    type=float, default=0.7)
     parser.add_argument('-t', '--t_mul',      help='cosine decay param',    type=float, default=2.0)
     parser.add_argument('-a', '--alpha',      help='cosine decay param',    type=float, default=3)
-    parser.add_argument('-l', '--lambda',     help='cosine decay param',    type=float, default=0.02, dest='lambda_val', nargs="+",)
+    parser.add_argument('-l', '--lambda',     help='auxiliary loss weights',type=float, default=0.02, dest='lambda_val', nargs="+")
+    parser.add_argument('-g', '--gamma',      help='boundary loss weight',  type=float, default=0.3)
     parser.add_argument('-d', '--delta',      help='augmentation max delta',type=float, default=0.05)
-    parser.add_argument('-s', '--smooth',     help='loss label smoothing',  type=float, default=0.2, nargs="+",)
+    parser.add_argument('-s', '--smooth',     help='loss label smoothing',  type=float, default=0.2, nargs="+")
     parser.add_argument(
         '-c', '--continue', action='store_true', default=False, help='continue from last recorded task', dest='continue_train'
     )
@@ -98,21 +99,22 @@ def log_pred(image, mask, model, logger, series):
         plt.axis('off')
     logger.report_matplotlib_figure('Model Prediction', series, fig)
 
-def get_loss(model, l, s): 
-    assert (type(l)==int and l <= 1) or all([i<=1 for i in l]), 'auxiliary loss cannot be greater than main loss'
-    assert (type(s)==int and s < 0.5) or all([i<0.5 for i in s]), 'label smoothing  cannot be greater than 0.5'
+def get_loss(model, l, s, g): 
+    assert (type(l)==float and 0 <= l <= 1) or all([0<=i<=1 for i in l]), 'auxiliary loss cannot be greater than main loss'
+    assert (type(s)==float and 0 <= s < 0.5) or all([0<=i<0.5 for i in s]), 'label smoothing  cannot be greater than 0.5'
+    assert (0<=g<=1), 'boundary loss weight need to be in range [0,1]'
     print('model outputs:',model.outputs)
     aux = len([i for i in model.outputs if 'aux_out' in i.name])
-    assert type(l)==int or len(l)==aux, 'length auxiliary loss weights different from auxiliary outputs'
-    assert type(s)==int or len(s)==aux, 'length loss label smoothing different from auxiliary outputs'
+    assert type(l)==float or len(l)==aux, 'length auxiliary loss weights different from auxiliary outputs'
+    assert type(s)==float or len(s)==aux, 'length loss label smoothing different from auxiliary outputs'
 
     lossDict = {}
     lossWeights = {}
     for node in model.outputs:
         n = node.name.split('/')[0]
         if n == 'softmax_out':
-            lossDict[n] = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_loss")
-            lossWeights[n] = 1.0
+            lossDict[n] = [tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_loss"),BoundaryLoss(8)]
+            lossWeights[n] = [1.0, g]
         elif 'aux_out' in n:
             try:
                 i = int(n.replace('aux_out',''))
@@ -124,8 +126,8 @@ def get_loss(model, l, s):
                 continue
     if 'softmax_out' not in lossDict.keys():
         n = model.outputs[0].name
-        lossDict[n] = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_loss")
-        lossWeights[n] = 1.0
+        lossDict[n] = [tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_loss"),BoundaryLoss(8)]
+        lossWeights[n] = [1.0, g]
 
     return lossDict, lossWeights
 
@@ -179,6 +181,7 @@ if __name__ == '__main__':
     KFOLD = args.kfold
     BATCH_SIZE = args.batch_size
     LAMBDA = args.lambda_val
+    GAMMA = args.gamma
     SMOOTH = args.smooth
     #training constants
     VAL_SUBSPLITS = 1
@@ -219,7 +222,7 @@ if __name__ == '__main__':
         log_pred(sample_image, sample_mask, model, logger, 'start')
 
     # loss functions
-    losses, lossWeights = get_loss(model, LAMBDA, SMOOTH)
+    losses, lossWeights = get_loss(model, LAMBDA, SMOOTH, GAMMA)
 
     # callbacks
     logs = f'{MODEL_TYPE}{datetime.now().strftime("%Y%m%d-%H%M%S")}'

@@ -1199,3 +1199,83 @@ class SparseCategoricalCrossentropy(tf.keras.losses.CategoricalCrossentropy):
         n_classes = tf.shape(y_pred)[-1]
         y_true = tf.one_hot(tf.cast(tf.squeeze(y_true,axis=-1),tf.int32), n_classes, axis=-1)
         return super(SparseCategoricalCrossentropy, self).call(y_true, y_pred)
+
+def contour(x):
+    '''
+    Differenciable aproximation of contour extraction
+    
+    '''   
+    min_pool_x = tf.nn.max_pool2d(x*-1, (3, 3), 1, 'SAME')*-1
+    max_min_pool_x = tf.nn.max_pool2d(min_pool_x, (3, 3), 1, 'SAME')
+    contour = tf.nn.relu(max_min_pool_x - min_pool_x)
+    return contour
+
+class BoundaryLoss(tf.keras.losses.Loss):
+    def __init__(self, classes, sparse=True, from_logits=False, name='boundary_loss', **kwargs):
+        super(BoundaryLoss, self).__init__(name=name, **kwargs)
+        self.from_logits = from_logits
+        self.sparse = sparse
+        self.classes = classes
+
+    def get_config(self):
+        config = {
+            'from_logits': self.from_logits,
+            'sparse': self.sparse,
+            'classes': self.classes,
+        }
+        base_config = super().get_config()
+        return {**base_config, **config}
+
+    def call(self, y_true, y_pred):
+        _,w,h,_ = tf.cast(tf.shape(y_true), tf.float32)
+        if (self.from_logits):
+            y_pred = tf.nn.softmax(y_pred, axis=-1)
+            y_true = tf.nn.softmax(y_true, axis=-1)
+        if (self.sparse):
+            y_pred = tf.argmax(y_pred, axis=-1)
+            y_true = tf.argmax(y_true, axis=-1)
+        else:
+            y_pred = tf.cast(tf.squeeze(y_pred, axis=-1), tf.int32)
+            y_true = tf.cast(tf.squeeze(y_true, axis=-1), tf.int32)
+        y_pred = tf.one_hot(y_pred, self.classes)
+        y_true = tf.one_hot(y_true, self.classes)
+        pred = tf.reduce_sum(contour(y_pred),axis=[1,2])
+        true = tf.reduce_sum(contour(y_true),axis=[1,2])
+        loss = tf.sqrt((pred - true) ** 2)/(w*h)
+        return tf.reduce_mean(loss)
+    
+class DiceBoundaryLoss(tf.keras.losses.Loss):
+    def __init__(self, classes, smooth=0, sparse=True, from_logits=False, name='dice_boundary_loss', **kwargs):
+        super(DiceBoundaryLoss, self).__init__(name=name, **kwargs)
+        self.from_logits = from_logits
+        self.sparse = sparse
+        self.classes = classes
+        self.smooth = float(smooth)
+
+    def get_config(self):
+        config = {
+            'from_logits': self.from_logits,
+            'sparse': self.sparse,
+            'classes': self.classes,
+            'smooth': self.smooth,
+        }
+        base_config = super().get_config()
+        return {**base_config, **config}
+
+    def call(self, y_true, y_pred):
+        if (self.from_logits):
+            y_pred = tf.nn.softmax(y_pred, axis=-1)
+            y_true = tf.nn.softmax(y_true, axis=-1)
+        if (self.sparse):
+            y_pred = tf.argmax(y_pred, axis=-1)
+            y_true = tf.argmax(y_true, axis=-1)
+        else:
+            y_pred = tf.cast(tf.squeeze(y_pred, axis=-1), tf.int32)
+            y_true = tf.cast(tf.squeeze(y_true, axis=-1), tf.int32)
+        y_pred = tf.one_hot(y_pred, self.classes, dtype=tf.float32)
+        y_true = tf.one_hot(y_true, self.classes, dtype=tf.float32)
+        pred = contour(y_pred)
+        true = contour(y_true)
+        intersect = tf.reduce_sum(pred*true,axis=[1,2])
+        loss = 1.0-(2.0*intersect+self.smooth)/(tf.reduce_sum(pred,axis=[1,2])+tf.reduce_sum(true,axis=[1,2])+self.smooth)
+        return tf.reduce_mean(loss)
