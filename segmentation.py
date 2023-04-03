@@ -100,15 +100,14 @@ def log_pred(image, mask, model, logger, series):
     logger.report_matplotlib_figure('Model Prediction', series, fig)
 
 def get_loss(model, l, s, g): 
-    print(type(l))
     assert (type(l)==float and 0 <= l <= 1) or all([0<=i<=1 for i in l]), 'auxiliary loss cannot be greater than main loss'
     assert (type(s)==float and 0 <= s < 0.5) or all([0<=i<0.5 for i in s]), 'label smoothing  cannot be greater than 0.5'
     assert (0<=g<=1), 'boundary loss weight need to be in range [0,1]'
     print('model outputs:',model.outputs)
     aux = len([i for i in model.outputs if 'aux_out' in i.name])
-    if (type(l)!=float and len(l)==1):
+    if (type(l)==list and len(l)==1):
         l = l[0]
-    if (type(s)!=float and len(s)==1):
+    if (type(s)==list and len(s)==1):
         s = s[0]
     assert type(l)==float or len(l)==aux, 'length auxiliary loss weights different from auxiliary outputs'
     assert type(s)==float or len(s)==aux, 'length loss label smoothing different from auxiliary outputs'
@@ -118,13 +117,20 @@ def get_loss(model, l, s, g):
     for node in model.outputs:
         n = node.name.split('/')[0]
         if n == 'softmax_out':
-            lossDict[n] = [tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_loss"),BoundaryLoss(8)]
-            lossWeights[n] = [1.0, g]
+            if g > 0:
+                def custom_loss_fn(y_true, y_pred):
+                    loss1 = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_ce_loss")
+                    loss2 = BoundaryLoss(8, name="main_bd_loss")
+                    return loss1(y_true, y_pred) + g*loss2(y_true, y_pred)
+                lossDict[n] = custom_loss_fn
+            else:
+                lossDict[n] = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_loss")
+            lossWeights[n] = 1.0
         elif 'aux_out' in n:
             try:
                 i = int(n.replace('aux_out',''))
-                ll = l if type(l)==int else l[i-1]
-                ss = s if type(s)==int else s[i-1]
+                ll = l if type(l)==float else l[i-1]
+                ss = s if type(s)==float else s[i-1]
                 lossDict[n] = SparseCategoricalCrossentropy(from_logits=True, label_smoothing=ss, name=f"aux_loss_{i}")
                 lossWeights[n] = ll
             except:
@@ -134,6 +140,12 @@ def get_loss(model, l, s, g):
         lossDict[n] = [tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_loss"),BoundaryLoss(8)]
         lossWeights[n] = [1.0, g]
 
+    print('='*22, 'Loss Info', '='*22)
+    print(f'loss info:  g={g}, l={l}, s={s}')
+    print(f'loss keys: {list(lossDict.keys())}')
+    print(f'loss dict: {lossDict}')
+    print(f'loss weights: {lossWeights}')
+    print('='*21, 'End of Info', '='*21)
     return lossDict, lossWeights
 
 class LogPlotCallback(tf.keras.callbacks.Callback):
