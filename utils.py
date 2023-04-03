@@ -647,6 +647,7 @@ def get_flops(model):
         return flops.total_float_ops
 
 def analyze(model):
+    print('='*21, ' Model Info', '='*21)
     trainableParams = np.sum([np.prod(v.get_shape()) for v in model.trainable_weights])
     nonTrainableParams = np.sum([np.prod(v.get_shape()) for v in model.non_trainable_weights])
     totalParams = trainableParams + nonTrainableParams
@@ -655,6 +656,7 @@ def analyze(model):
     print('Nontrainable params:',nonTrainableParams)
     print('Total params:', totalParams)
     print('Flops:', get_flops(model))
+    print('='*21, 'End of Info', '='*21)
 
 """#Models"""
 
@@ -1227,7 +1229,9 @@ class BoundaryLoss(tf.keras.losses.Loss):
         return {**base_config, **config}
 
     def call(self, y_true, y_pred):
-        _,w,h,_ = tf.cast(tf.shape(y_true), tf.float32)
+        shape = tf.cast(tf.shape(y_true), tf.float32)
+        w = shape[1]
+        h = shape[2]
         if (self.from_logits):
             y_pred = tf.nn.softmax(y_pred, axis=-1)
             y_true = tf.nn.softmax(y_true, axis=-1)

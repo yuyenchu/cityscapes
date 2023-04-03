@@ -100,11 +100,16 @@ def log_pred(image, mask, model, logger, series):
     logger.report_matplotlib_figure('Model Prediction', series, fig)
 
 def get_loss(model, l, s, g): 
+    print(type(l))
     assert (type(l)==float and 0 <= l <= 1) or all([0<=i<=1 for i in l]), 'auxiliary loss cannot be greater than main loss'
     assert (type(s)==float and 0 <= s < 0.5) or all([0<=i<0.5 for i in s]), 'label smoothing  cannot be greater than 0.5'
     assert (0<=g<=1), 'boundary loss weight need to be in range [0,1]'
     print('model outputs:',model.outputs)
     aux = len([i for i in model.outputs if 'aux_out' in i.name])
+    if (type(l)!=float and len(l)==1):
+        l = l[0]
+    if (type(s)!=float and len(s)==1):
+        s = s[0]
     assert type(l)==float or len(l)==aux, 'length auxiliary loss weights different from auxiliary outputs'
     assert type(s)==float or len(s)==aux, 'length loss label smoothing different from auxiliary outputs'
 
