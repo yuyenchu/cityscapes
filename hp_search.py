@@ -87,7 +87,7 @@ print('Top {} experiments are:'.format(k))
 for n, t in enumerate(top_exp, 1):
     print('Rank {}: task id={} |result={}'
           .format(n, t.id, t.get_last_scalar_metrics()['epoch_softmax_out_sparse_mean_iou']['validation: epoch_softmax_out_sparse_mean_iou']['last']))
-    t.add_tags([f'Rank {n}'])
+    t.add_tags([f'Rank_{n}'])
 optimizer.stop()
 print('Optimization done')
 task.close()
