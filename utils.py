@@ -1249,7 +1249,7 @@ class BoundaryLoss(tf.keras.losses.Loss):
         return tf.reduce_mean(loss)
     
 class DiceBoundaryLoss(tf.keras.losses.Loss):
-    def __init__(self, classes, smooth=0, sparse=True, from_logits=False, name='dice_boundary_loss', **kwargs):
+    def __init__(self, classes, smooth=1, sparse=True, from_logits=False, name='dice_boundary_loss', **kwargs):
         super(DiceBoundaryLoss, self).__init__(name=name, **kwargs)
         self.from_logits = from_logits
         self.sparse = sparse

@@ -121,7 +121,8 @@ def get_loss(model, l, s, g):
                 def custom_loss_fn(y_true, y_pred):
                     loss1 = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_ce_loss")
                     loss2 = BoundaryLoss(8, name="main_bd_loss")
-                    return loss1(y_true, y_pred) + g*loss2(y_true, y_pred)
+                    loss3 = DiceBoundaryLoss(8, name="main_dbd_loss")
+                    return loss1(y_true, y_pred) + g*loss2(y_true, y_pred) + g*loss3(y_true, y_pred)
                 lossDict[n] = custom_loss_fn
             else:
                 lossDict[n] = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, name="main_loss")
