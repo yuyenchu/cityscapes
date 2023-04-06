@@ -22,7 +22,7 @@ task = Task.init(project_name='Hyperparameter Optimization with BOHB',
                  task_name='Hyperparameter Search: semantic_segmentation',
                  task_type=Task.TaskTypes.optimizer,
                  reuse_last_task_id=False)
-configs = {'template_task_id': '1e6496f1884140b58beb3f0eeae3908b'}
+configs = {'template_task_id': 'c8e48e41142d463da60aa901ceddd847'}
 configs = task.connect(configs)
 
 optimizer = HyperParameterOptimizer(
@@ -87,7 +87,7 @@ print('Top {} experiments are:'.format(k))
 for n, t in enumerate(top_exp, 1):
     print('Rank {}: task id={} |result={}'
           .format(n, t.id, t.get_last_scalar_metrics()['epoch_softmax_out_sparse_mean_iou']['validation: epoch_softmax_out_sparse_mean_iou']['last']))
-    t.add_tags([f'Rank_{n}'])
+    t.add_tags(f'Rank_{n}')
 optimizer.stop()
 print('Optimization done')
 task.close()
