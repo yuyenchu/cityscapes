@@ -1,9 +1,9 @@
 from clearml.automation import UniformParameterRange, UniformIntegerParameterRange, ParameterSet
 from clearml.automation import HyperParameterOptimizer
 from clearml.automation.hpbandster import OptimizerBOHB
-from custom_parameters import NargsParameterSet, UniformRange
-
 from clearml import Task
+
+from custom_parameters import NargsParameterSet, UniformRange
 from custom_bohb import CustomOptimizerBOHB
 
 def job_complete_callback(
