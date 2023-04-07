@@ -166,7 +166,12 @@ if version.parse(clearml.__version__)>version.parse('1.9.3'):
     import typing
     from clearml import Task
     def patchFunc(self, completed_jobs, cur_completed_jobs, task_logger, title, force=False):
-        job_ids_sorted_by_objective = self.__sort_jobs_by_objective(completed_jobs)
+        ### replace call of __sort_jobs_by_objective since it's not accessible
+        if not completed_jobs:
+            return []
+        job_ids_sorted_by_objective = list(sorted(
+            completed_jobs.keys(), key=lambda x: completed_jobs[x][0], reverse=bool(self.objective_metric.sign >= 0)))
+        ###
         best_experiment = \
             (self.objective_metric.get_normalized_objective(job_ids_sorted_by_objective[0]),
              job_ids_sorted_by_objective[0]) \
@@ -250,6 +255,7 @@ if version.parse(clearml.__version__)>version.parse('1.9.3'):
                         ticks = col[1:]
                         ### patch for unhashable objects
                         unique_ticks = list(set([t if isinstance(t, typing.Hashable) else tuple(t) for t in ticks]))
+                        ###
                         d = dict(label=col[0], values=values, tickvals=values, ticktext=ticks)
                         if len(ticks) != len(unique_ticks): 
                             ticktext = {key: i for i, key in enumerate(unique_ticks)}
