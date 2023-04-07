@@ -164,6 +164,7 @@ import clearml
 if version.parse(clearml.__version__)>version.parse('1.9.3'):
     print('Detect clearml version > 1.9.3, activate patch for clearml.automation.HyperParameterOptimizer._report_completed_status')
     import typing
+    from copy import copy, deepcopy
     from clearml import Task
     def patchFunc(self, completed_jobs, cur_completed_jobs, task_logger, title, force=False):
         ### replace call of __sort_jobs_by_objective since it's not accessible
@@ -211,6 +212,7 @@ if version.parse(clearml.__version__)>version.parse('1.9.3'):
                         if normalized_value is not None and normalized_value > best_experiment[0]:
                             best_experiment = normalized_value, job_id
                         c = completed_jobs[job_id]
+                        print('Calling user callback')
                         self._experiment_completed_cb(job_id, c[0], c[1], c[2], best_experiment[1])
 
             if pairs:
