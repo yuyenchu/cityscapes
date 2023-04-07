@@ -166,12 +166,19 @@ if version.parse(clearml.__version__)>version.parse('1.9.3'):
     import typing
     from copy import copy, deepcopy
     from clearml import Task
+
     def patchFunc(self, completed_jobs, cur_completed_jobs, task_logger, title, force=False):
+        DEBUG = True
+        if DEBUG:
+            print('='*10,'PATCH FUNC START','='*10)
         ### replace call of __sort_jobs_by_objective since it's not accessible
         if not completed_jobs:
-            return []
-        job_ids_sorted_by_objective = list(sorted(
-            completed_jobs.keys(), key=lambda x: completed_jobs[x][0], reverse=bool(self.objective_metric.sign >= 0)))
+            job_ids_sorted_by_objective = []
+        else:
+            job_ids_sorted_by_objective = list(sorted(
+                completed_jobs.keys(), key=lambda x: completed_jobs[x][0], reverse=bool(self.objective_metric.sign >= 0)))
+        if DEBUG:
+            print(f'--- job_ids_sorted_by_objective={job_ids_sorted_by_objective}')
         ###
         best_experiment = \
             (self.objective_metric.get_normalized_objective(job_ids_sorted_by_objective[0]),
@@ -212,7 +219,8 @@ if version.parse(clearml.__version__)>version.parse('1.9.3'):
                         if normalized_value is not None and normalized_value > best_experiment[0]:
                             best_experiment = normalized_value, job_id
                         c = completed_jobs[job_id]
-                        print('Calling user callback')
+                        if DEBUG:
+                            print('--- Calling user callback')
                         self._experiment_completed_cb(job_id, c[0], c[1], c[2], best_experiment[1])
 
             if pairs:
@@ -257,6 +265,8 @@ if version.parse(clearml.__version__)>version.parse('1.9.3'):
                         ticks = col[1:]
                         ### patch for unhashable objects
                         unique_ticks = list(set([t if isinstance(t, typing.Hashable) else tuple(t) for t in ticks]))
+                        if DEBUG:
+                            print(f'--- unique_ticks={unique_ticks}')
                         ###
                         d = dict(label=col[0], values=values, tickvals=values, ticktext=ticks)
                         if len(ticks) != len(unique_ticks): 
@@ -280,6 +290,8 @@ if version.parse(clearml.__version__)>version.parse('1.9.3'):
                 task = self._task or Task.current_task()
                 if task:
                     task.upload_artifact(name='summary', artifact_object={'table': table_values})
+        if DEBUG:
+            print('='*10,'PATCH FUNC END','='*10)
     clearml.automation.HyperParameterOptimizer._report_completed_status = patchFunc
 
 if __name__=="__main__":
