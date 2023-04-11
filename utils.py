@@ -167,9 +167,10 @@ def SE_block(inputs, reduction_factor=2):
     x = layers.Multiply()([inputs, x])
     return x
 
+@tf.keras.utils.register_keras_serializable()
 class SE_Block(tf.keras.layers.Layer):
-    def __init__(self, reduction_factor=4, name=None):
-        super(SE_Block, self).__init__(name=name)
+    def __init__(self, reduction_factor=4, **kwargs):
+        super(SE_Block, self).__init__(**kwargs)
         self.reduction_factor = reduction_factor
 
     def get_config(self):
@@ -194,9 +195,10 @@ class SE_Block(tf.keras.layers.Layer):
         x = self.reshape(x)
         return self.out([inputs, x])
 
+@tf.keras.utils.register_keras_serializable()
 class Conv_Block(tf.keras.layers.Layer):
-    def __init__(self, kernel, filters, stride, activation=tf.nn.relu6, name=None):
-        super(Conv_Block, self).__init__(name=name)
+    def __init__(self, kernel, filters, stride, activation=tf.nn.relu6, **kwargs):
+        super(Conv_Block, self).__init__(**kwargs)
         self.kernel = kernel
         self.filters = filters
         self.activation = activation
@@ -229,9 +231,10 @@ class Conv_Block(tf.keras.layers.Layer):
         x = self.bn1(x)
         return x
 
+@tf.keras.utils.register_keras_serializable()
 class SelfAttention_Block(tf.keras.layers.Layer):
-    def __init__(self, reduction_factor, name=None):
-        super(SelfAttention_Block, self).__init__(name=name)
+    def __init__(self, reduction_factor, **kwargs):
+        super(SelfAttention_Block, self).__init__(**kwargs)
         self.reduction_factor = reduction_factor
         
     def get_config(self):
@@ -261,9 +264,10 @@ class SelfAttention_Block(tf.keras.layers.Layer):
         beta = tf.reshape(tf.matmul(h, beta, transpose_a=True), size) 
         return self.gamma * beta + x       
 
+@tf.keras.utils.register_keras_serializable()
 class DualSelfAttention_Block(tf.keras.layers.Layer):
-    def __init__(self, reduction_factor=1, identity=False, name=None):
-        super(DualSelfAttention_Block, self).__init__(name=name)
+    def __init__(self, reduction_factor=1, identity=False, **kwargs):
+        super(DualSelfAttention_Block, self).__init__(**kwargs)
         self.reduction_factor = reduction_factor
         self.identity = identity
         
@@ -302,12 +306,14 @@ class DualSelfAttention_Block(tf.keras.layers.Layer):
         else:
             return self.fuse([pa, ca])
 
+@tf.keras.utils.register_keras_serializable()
 def hswish(x):
     return x * tf.nn.relu6(x + 3) / 6
 
+@tf.keras.utils.register_keras_serializable()
 class MNV3_Block(tf.keras.layers.Layer):
-    def __init__(self, kernel, filters, stride=1, activation=tf.nn.relu6, reduction_factor=4, name=None):
-        super(MNV3_Block, self).__init__(name=name)
+    def __init__(self, kernel, filters, stride=1, activation=tf.nn.relu6, reduction_factor=4, **kwargs):
+        super(MNV3_Block, self).__init__(**kwargs)
         self.kernel = kernel
         self.filters = filters
         self.stride = stride
@@ -337,9 +343,10 @@ class MNV3_Block(tf.keras.layers.Layer):
         return x
 
 # mobilenet self attantion, replace se block with self attantion block
+@tf.keras.utils.register_keras_serializable()
 class MNSA_Block(tf.keras.layers.Layer):
-    def __init__(self, kernel, filters, stride=1, activation=tf.nn.relu6, reduction_factor=1, dual_attention=True, name=None):
-        super(MNSA_Block, self).__init__(name=name)
+    def __init__(self, kernel, filters, stride=1, activation=tf.nn.relu6, reduction_factor=1, dual_attention=True, **kwargs):
+        super(MNSA_Block, self).__init__(**kwargs)
         self.kernel = kernel
         self.filters = filters
         self.stride = stride
@@ -372,10 +379,11 @@ class MNSA_Block(tf.keras.layers.Layer):
         x = self.sa(x)
         x = self.out(x)
         return x
-
+    
+@tf.keras.utils.register_keras_serializable()
 class MHSA_Block(tf.keras.layers.Layer):
-    def __init__(self, num_heads=1, name=None):
-        super(MHSA_Block, self).__init__(name=name)
+    def __init__(self, num_heads=1, **kwargs):
+        super(MHSA_Block, self).__init__(**kwargs)
         self.num_heads = num_heads
         
     def get_config(self):
@@ -400,9 +408,10 @@ class MHSA_Block(tf.keras.layers.Layer):
         out = self.attention(q, v, k)
         return out
 
+@tf.keras.utils.register_keras_serializable()
 class MHCA_Block(tf.keras.layers.Layer):
-    def __init__(self, num_heads=1, name=None):
-        super(MHCA_Block, self).__init__(name=name)
+    def __init__(self, num_heads=1, **kwargs):
+        super(MHCA_Block, self).__init__(**kwargs)
         self.num_heads = num_heads
         
     def get_config(self):
@@ -452,9 +461,10 @@ class MHCA_Block(tf.keras.layers.Layer):
         out = self.concat([x1,x2])
         return out
 
+@tf.keras.utils.register_keras_serializable()
 class CCA_Block(tf.keras.layers.Layer):
-    def __init__(self, name=None):
-        super(CCA_Block, self).__init__(name=name)
+    def __init__(self, **kwargs):
+        super(CCA_Block, self).__init__(**kwargs)
         
     def get_config(self):
         config = super().get_config()
@@ -493,9 +503,10 @@ class CCA_Block(tf.keras.layers.Layer):
         out = self.add([x1, x2a])
         return out
 
+@tf.keras.utils.register_keras_serializable()
 class Conv3_Block(tf.keras.layers.Layer):
-    def __init__(self, filters, name=None):
-        super(Conv3_Block, self).__init__(name=name)
+    def __init__(self, filters, **kwargs):
+        super(Conv3_Block, self).__init__(**kwargs)
         self.filters = filters
         
     def get_config(self):
@@ -521,9 +532,10 @@ class Conv3_Block(tf.keras.layers.Layer):
         out = self.relu(x)
         return out
 
+@tf.keras.utils.register_keras_serializable()
 class UnetDown_Block(tf.keras.layers.Layer):
-    def __init__(self, filters, name=None):
-        super(UnetDown_Block, self).__init__(name=name)
+    def __init__(self, filters, **kwargs):
+        super(UnetDown_Block, self).__init__(**kwargs)
         self.filters = filters
         
     def get_config(self):
@@ -546,9 +558,10 @@ class UnetDown_Block(tf.keras.layers.Layer):
         out = self.conv3(x)
         return out
 
+@tf.keras.utils.register_keras_serializable()
 class VOV_Block(tf.keras.layers.Layer):
-    def __init__(self, filters_out, n_layers, layer_filter=None, activation='relu6', reduction_factor=4, identity=False, use_mobile=False, name=None):
-        super(VOV_Block, self).__init__(name=name)
+    def __init__(self, filters_out, n_layers, layer_filter=None, activation='relu6', reduction_factor=4, identity=False, use_mobile=False, **kwargs):
+        super(VOV_Block, self).__init__(**kwargs)
         self.filters_out = filters_out
         self.n_layers = n_layers
         self.layer_filter = layer_filter
@@ -592,9 +605,10 @@ class VOV_Block(tf.keras.layers.Layer):
             out = self.add([inputs, out])
         return out
 
+@tf.keras.utils.register_keras_serializable()
 class ELAN_Block(tf.keras.layers.Layer):
-    def __init__(self, filters_out, n_layers, layer_filter=None, activation='relu6', reduction_factor=4, identity=False, use_mobile=False, name=None):
-        super(ELAN_Block, self).__init__(name=name)
+    def __init__(self, filters_out, n_layers, layer_filter=None, activation='relu6', reduction_factor=4, identity=False, use_mobile=False, **kwargs):
+        super(ELAN_Block, self).__init__(**kwargs)
         self.filters_out = filters_out
         self.n_layers = n_layers
         self.layer_filter = layer_filter

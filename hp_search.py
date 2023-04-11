@@ -88,6 +88,12 @@ for n, t in enumerate(top_exp, 1):
     print('Rank {}: task id={} |result={}'
           .format(n, t.id, t.get_last_scalar_metrics()['epoch_softmax_out_sparse_mean_iou']['validation: epoch_softmax_out_sparse_mean_iou']['last']))
     t.add_tags(f'Rank_{n}')
+    cloned = Task.clone(t.id, project='semantic_segmentation')
+    cloned.set_parameter('Args/epochs', 500, value_type=int)
+    # Task.enqueue(cloned, queue_name='default')
 optimizer.stop()
+all_childs = [t for t in Task.get_tasks(project_name='Hyperparameter Optimization with BOHB', task_filter={'parent':task.task_id}) if t.task_id not in [i.id for i in top_exp]]
+for c in all_childs:
+    c.delete_artifacts(list(c.artifacts.keys()))
 print('Optimization done')
 task.close()

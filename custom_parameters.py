@@ -264,7 +264,8 @@ if version.parse(clearml.__version__)>version.parse('1.9.3'):
                         values = list(range(len(col[1:])))
                         ticks = col[1:]
                         ### patch for unhashable objects
-                        unique_ticks = list(set([t if isinstance(t, typing.Hashable) else tuple(t) for t in ticks]))
+                        ticks = [t if isinstance(t, typing.Hashable) else tuple(t) for t in ticks]
+                        unique_ticks = list(set(ticks))
                         if DEBUG:
                             print(f'--- unique_ticks={unique_ticks}')
                         ###
