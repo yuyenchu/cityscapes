@@ -20,3 +20,4 @@
 
 ### Result
 ![cleaml scalar](clearml_scalar_page.png)
+![cleaml plot](clearml_plot.png)
