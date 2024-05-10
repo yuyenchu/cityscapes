@@ -4,6 +4,7 @@ import tensorflow.keras.layers as layers
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+import os
 from datetime import datetime
 from clearml import Task, Dataset
 from utils import *
@@ -63,7 +64,7 @@ def load_model(model, model_type=None):
         return 
     print('loading weights from:', local_weights_path)
     try:
-        model.load_weights(local_weights_path)
+        model.load_weights(os.path.join(local_weights_path,"variables","variables"))
     except:
         print('failed loading weights')
 
@@ -279,6 +280,7 @@ if __name__ == '__main__':
     
     model.load_weights(checkpoint_path)
     model.save(MODEL_TYPE)
+    task.upload_artifact(name=f'{MODEL_TYPE}_checkpoint', artifact_object=checkpoint_path)
     if (not DEBUG):
         log_pred(sample_image, sample_mask, model, logger, 'end')
         task.close()
