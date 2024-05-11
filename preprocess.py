@@ -37,6 +37,15 @@ def img_to_base64(image):
 
     return base64_str
 
+def img_to_base64png(image):
+    img = Image.fromarray(image)
+    im_file = io.BytesIO()
+    img.save(im_file, format="PNG")
+    im_bytes = im_file.getvalue()
+    base64_str = base64.b64encode(im_bytes)
+
+    return base64_str
+
 # Notice Preprocess class Must be named "Preprocess"
 class Preprocess(object):
     def __init__(self):
@@ -75,8 +84,14 @@ class Preprocess(object):
                 print("="*20, out.shape)
                 print("="*20, cmap[out].shape)
                 item={
+                    'labels': label_names,
                     'seg_mask': img_to_base64(cmap[out]),
                 }
+                for i, l in enumerate(label_names):
+                    mask = (out==i).astype(np.uint8)
+                    masked = cmap[mask*i]*mask[:,:,np.newaxis]
+                    masked = np.dstack((masked, mask[:,:,np.newaxis]*255))
+                    item[f'{i}_mask'] = img_to_base64png(masked),
                 output_list.append(item)
                 
         # data is returned as probability per class (10 class/digits)
